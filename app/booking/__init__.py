@@ -1,4 +1,13 @@
 from app.booking.availability import AvailabilityService
+from app.booking.cancel_booking import BookingCancelResult, BookingCancellationService
+from app.booking.contracts import (
+    BOOKING_STATUS_ACTIVE,
+    BOOKING_STATUS_CANCELLED_BY_CLIENT,
+    BOOKING_STATUS_CANCELLED_BY_MASTER,
+    BOOKING_STATUS_COMPLETED,
+    can_transition_booking_status,
+    is_cancellation_reason_required,
+)
 from app.booking.create_booking import BookingCreateResult, BookingService
 from app.booking.flow import BookingFlowRepository, BookingNotification, BookingNotificationService, TelegramBookingFlowService
 from app.booking.messages import RU_BOOKING_MESSAGES
@@ -13,11 +22,19 @@ from app.booking.service_options import (
 
 __all__ = [
     "AvailabilityService",
+    "BookingCancelResult",
+    "BookingCancellationService",
     "BookingCreateResult",
     "BookingService",
     "BookingFlowRepository",
     "BookingNotification",
     "BookingNotificationService",
+    "BOOKING_STATUS_ACTIVE",
+    "BOOKING_STATUS_CANCELLED_BY_CLIENT",
+    "BOOKING_STATUS_CANCELLED_BY_MASTER",
+    "BOOKING_STATUS_COMPLETED",
+    "can_transition_booking_status",
+    "is_cancellation_reason_required",
     "TelegramBookingFlowService",
     "RU_BOOKING_MESSAGES",
     "SERVICE_OPTION_CODES",

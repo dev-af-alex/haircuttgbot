@@ -60,6 +60,16 @@
     - Rejects overlap with active booking/day-off/manual blocks/lunch and out-of-work-window slots.
     - Enforces at most one active future booking per client.
 
+- Booking cancellation contract (domain baseline)
+  - Canonical statuses: `active`, `cancelled_by_client`, `cancelled_by_master`, `completed`.
+  - Allowed transitions:
+    - `active -> cancelled_by_client`
+    - `active -> cancelled_by_master`
+    - `active -> completed`
+  - Cancellation reason policy:
+    - `cancelled_by_client`: reason is optional (not required).
+    - `cancelled_by_master`: reason is required.
+
 - `GET /internal/telegram/client/booking-flow/start`
   - Purpose: start client booking flow (master selection step).
   - Response `200`:
@@ -83,3 +93,24 @@
     `{"client_telegram_user_id":2000001,"master_id":1,"service_type":"haircut","slot_start":"2026-02-12T10:00:00+00:00"}`
   - Response `200` (success):
     `{"created":true,"booking_id":42,"message":"Запись успешно создана.","notifications":[{"recipient_telegram_user_id":2000001,"message":"Запись подтверждена."},{"recipient_telegram_user_id":1000001,"message":"Новая запись клиента добавлена в расписание."}]}`
+
+- `POST /internal/telegram/client/booking-flow/cancel`
+  - Purpose: cancel client-owned active future booking with participant notifications.
+  - Request:
+    `{"client_telegram_user_id":2000001,"booking_id":42}`
+  - Response `200` (success):
+    `{"cancelled":true,"booking_id":42,"message":"Запись успешно отменена.","notifications":[{"recipient_telegram_user_id":2000001,"message":"Ваша запись отменена."},{"recipient_telegram_user_id":1000001,"message":"Клиент отменил запись."}]}`
+  - Response `200` (rejected example):
+    `{"cancelled":false,"booking_id":null,"message":"Эту запись нельзя отменить.","notifications":[]}`
+
+- `POST /internal/telegram/master/booking-flow/cancel`
+  - Purpose: cancel master-owned active future booking with mandatory reason and participant notifications.
+  - Request:
+    `{"master_telegram_user_id":1000001,"booking_id":42,"reason":"Непредвиденные обстоятельства"}`
+  - Response `200` (success):
+    `{"cancelled":true,"booking_id":42,"message":"Запись успешно отменена.","notifications":[{"recipient_telegram_user_id":2000001,"message":"Мастер отменил запись. Причина: Непредвиденные обстоятельства"},{"recipient_telegram_user_id":1000001,"message":"Запись клиента отменена."}]}`
+  - Response `200` (rejected example):
+    `{"cancelled":false,"booking_id":null,"message":"Укажите причину отмены.","notifications":[]}`
+  - Behavior notes:
+    - Rejects cancellation if reason is empty/whitespace.
+    - Rejects cancellation for bookings outside master ownership.

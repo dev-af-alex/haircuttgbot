@@ -3,7 +3,7 @@
 Legend: TODO / IN_PROGRESS / DONE
 Sizing target: each task is 1-3 dev-days.
 
-- T-001 — Add cancellation domain contract baseline — Status: TODO
+- T-001 — Add cancellation domain contract baseline — Status: DONE
   - Scope: define canonical cancellation status/reason contract and shared validation primitives used by API/Telegram handlers.
   - Acceptance:
     - cancellation reason field and status transitions are codified in one shared contract.
@@ -11,7 +11,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 1 dev-day
   - Dependencies: none
 
-- T-002 — Implement client self-cancel use case — Status: TODO
+- T-002 — Implement client self-cancel use case — Status: DONE
   - Scope: add client cancellation path that allows canceling only the caller's active future booking.
   - Acceptance:
     - client can cancel own active future booking.
@@ -19,7 +19,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 2 dev-days
   - Dependencies: T-001
 
-- T-003 — Wire client cancellation notification — Status: TODO
+- T-003 — Wire client cancellation notification — Status: DONE
   - Scope: send cancellation confirmation notifications for client-initiated cancellation to relevant participants.
   - Acceptance:
     - client receives cancellation confirmation.
@@ -27,7 +27,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 1 dev-day
   - Dependencies: T-002
 
-- T-004 — Implement master cancel flow with mandatory reason — Status: TODO
+- T-004 — Implement master cancel flow with mandatory reason — Status: DONE
   - Scope: add master cancellation path requiring non-empty textual reason and enforcing master ownership of booking.
   - Acceptance:
     - master cancellation without reason is rejected.
@@ -35,7 +35,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 2 dev-days
   - Dependencies: T-001
 
-- T-005 — Deliver reasoned cancellation notifications — Status: TODO
+- T-005 — Deliver reasoned cancellation notifications — Status: DONE
   - Scope: ensure master cancellation reason is propagated to client notification payload and localized ru message templates.
   - Acceptance:
     - client notification for master-initiated cancellation includes provided reason.

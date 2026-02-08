@@ -76,6 +76,17 @@ class TelegramFlowConfirmRequest(BaseModel):
     slot_start: datetime
 
 
+class TelegramFlowCancelRequest(BaseModel):
+    client_telegram_user_id: int
+    booking_id: int
+
+
+class TelegramFlowMasterCancelRequest(BaseModel):
+    master_telegram_user_id: int
+    booking_id: int
+    reason: str
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "bot-api"}
@@ -174,4 +185,23 @@ def telegram_booking_flow_confirm(payload: TelegramFlowConfirmRequest) -> dict[s
         master_id=payload.master_id,
         service_type=payload.service_type,
         slot_start=payload.slot_start,
+    )
+
+
+@app.post("/internal/telegram/client/booking-flow/cancel")
+def telegram_booking_flow_cancel(payload: TelegramFlowCancelRequest) -> dict[str, object]:
+    flow = TelegramBookingFlowService(get_engine())
+    return flow.cancel(
+        client_telegram_user_id=payload.client_telegram_user_id,
+        booking_id=payload.booking_id,
+    )
+
+
+@app.post("/internal/telegram/master/booking-flow/cancel")
+def telegram_master_booking_flow_cancel(payload: TelegramFlowMasterCancelRequest) -> dict[str, object]:
+    flow = TelegramBookingFlowService(get_engine())
+    return flow.cancel_by_master(
+        master_telegram_user_id=payload.master_telegram_user_id,
+        booking_id=payload.booking_id,
+        reason=payload.reason,
     )

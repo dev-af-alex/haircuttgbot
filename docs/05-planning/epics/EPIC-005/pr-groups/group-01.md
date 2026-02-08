@@ -1,6 +1,6 @@
 # EPIC-005 / PR Group 01
 
-Status: TODO
+Status: DONE
 
 ## Objective
 
@@ -34,6 +34,6 @@ Ship a mergeable cancellation-write baseline: client self-cancel flow with owner
 
 ## Task status
 
-- T-001: TODO
-- T-002: TODO
-- T-003: TODO
+- T-001: DONE
+- T-002: DONE
+- T-003: DONE

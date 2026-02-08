@@ -1,5 +1,8 @@
 RU_BOOKING_MESSAGES = {
     "created": "Запись успешно создана.",
+    "cancelled": "Запись успешно отменена.",
+    "cancel_not_allowed": "Эту запись нельзя отменить.",
+    "cancel_reason_required": "Укажите причину отмены.",
     "invalid_service_type": "Недопустимый тип услуги.",
     "master_not_found": "Мастер не найден.",
     "slot_not_available": "Выбранный слот недоступен.",
@@ -10,4 +13,8 @@ RU_BOOKING_MESSAGES = {
     "choose_slot": "Выберите доступный слот.",
     "booking_confirmed_client": "Запись подтверждена.",
     "booking_confirmed_master": "Новая запись клиента добавлена в расписание.",
+    "booking_cancelled_client": "Ваша запись отменена.",
+    "booking_cancelled_master": "Клиент отменил запись.",
+    "booking_cancelled_by_master_client_prefix": "Мастер отменил запись. Причина: {reason}",
+    "booking_cancelled_by_master_master": "Запись клиента отменена.",
 }

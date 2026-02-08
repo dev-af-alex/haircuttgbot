@@ -7,6 +7,14 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
 from app.booking.availability import AvailabilityService
+from app.booking.cancel_booking import BookingCancellationService
+from app.booking.contracts import (
+    BOOKING_STATUS_ACTIVE,
+    BOOKING_STATUS_CANCELLED_BY_CLIENT,
+    BOOKING_STATUS_CANCELLED_BY_MASTER,
+    can_transition_booking_status,
+    is_cancellation_reason_required,
+)
 from app.booking.create_booking import BookingService
 from app.booking.flow import TelegramBookingFlowService
 from app.booking.service_options import (
@@ -27,6 +35,7 @@ def _setup_availability_schema() -> Engine:
                 """
                 CREATE TABLE masters (
                     id INTEGER PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
                     is_active BOOLEAN NOT NULL,
                     work_start TEXT NOT NULL,
                     work_end TEXT NOT NULL,
@@ -45,6 +54,7 @@ def _setup_availability_schema() -> Engine:
                     client_user_id INTEGER,
                     service_type TEXT,
                     status TEXT NOT NULL,
+                    cancellation_reason TEXT,
                     slot_start DATETIME NOT NULL,
                     slot_end DATETIME NOT NULL
                 )
@@ -67,8 +77,8 @@ def _setup_availability_schema() -> Engine:
         conn.execute(
             text(
                 """
-                INSERT INTO masters (id, is_active, work_start, work_end, lunch_start, lunch_end)
-                VALUES (1, 1, '10:00:00', '21:00:00', '13:00:00', '14:00:00')
+                INSERT INTO masters (id, user_id, is_active, work_start, work_end, lunch_start, lunch_end)
+                VALUES (1, 10, 1, '10:00:00', '21:00:00', '13:00:00', '14:00:00')
                 """
             )
         )
@@ -117,6 +127,7 @@ def _setup_telegram_flow_schema() -> Engine:
                     client_user_id INTEGER,
                     service_type TEXT,
                     status TEXT NOT NULL,
+                    cancellation_reason TEXT,
                     slot_start DATETIME NOT NULL,
                     slot_end DATETIME NOT NULL
                 )
@@ -143,7 +154,8 @@ def _setup_telegram_flow_schema() -> Engine:
                 VALUES
                     (10, 1000001, 2),
                     (11, 1000002, 2),
-                    (20, 2000001, 1)
+                    (20, 2000001, 1),
+                    (21, 2000002, 1)
                 """
             )
         )
@@ -336,6 +348,171 @@ def test_create_booking_rejects_second_future_booking_for_client() -> None:
     assert "активная будущая" in result.message
 
 
+def test_cancellation_contract_baseline() -> None:
+    assert can_transition_booking_status(
+        current_status=BOOKING_STATUS_ACTIVE,
+        target_status=BOOKING_STATUS_CANCELLED_BY_CLIENT,
+    )
+    assert can_transition_booking_status(
+        current_status=BOOKING_STATUS_ACTIVE,
+        target_status=BOOKING_STATUS_CANCELLED_BY_MASTER,
+    )
+    assert not can_transition_booking_status(
+        current_status=BOOKING_STATUS_CANCELLED_BY_CLIENT,
+        target_status=BOOKING_STATUS_CANCELLED_BY_CLIENT,
+    )
+    assert not is_cancellation_reason_required(target_status=BOOKING_STATUS_CANCELLED_BY_CLIENT)
+    assert is_cancellation_reason_required(target_status=BOOKING_STATUS_CANCELLED_BY_MASTER)
+
+
+def test_client_cancel_success() -> None:
+    engine = _setup_availability_schema()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO bookings (id, master_id, client_user_id, service_type, status, slot_start, slot_end)
+                VALUES (41, 1, 5001, 'haircut', 'active', :slot_start, :slot_end)
+                """
+            ),
+            {
+                "slot_start": datetime(2026, 2, 12, 10, 0, tzinfo=UTC),
+                "slot_end": datetime(2026, 2, 12, 11, 0, tzinfo=UTC),
+            },
+        )
+
+    service = BookingCancellationService(engine)
+    result = service.cancel_by_client(
+        booking_id=41,
+        client_user_id=5001,
+        now=datetime(2026, 2, 11, 10, 0, tzinfo=UTC),
+    )
+    assert result.cancelled is True
+    assert result.booking_id == 41
+
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT status, cancellation_reason FROM bookings WHERE id = 41"),
+        ).mappings().one()
+    assert row["status"] == "cancelled_by_client"
+    assert row["cancellation_reason"] is None
+
+
+def test_client_cancel_rejects_non_owner_and_past_or_inactive() -> None:
+    engine = _setup_availability_schema()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO bookings (id, master_id, client_user_id, service_type, status, slot_start, slot_end)
+                VALUES
+                    (42, 1, 5001, 'haircut', 'active', :future_start, :future_end),
+                    (43, 1, 5001, 'beard', 'active', :past_start, :past_end),
+                    (44, 1, 5001, 'beard', 'cancelled_by_client', :inactive_start, :inactive_end)
+                """
+            ),
+            {
+                "future_start": datetime(2026, 2, 12, 10, 0, tzinfo=UTC),
+                "future_end": datetime(2026, 2, 12, 11, 0, tzinfo=UTC),
+                "past_start": datetime(2026, 2, 10, 10, 0, tzinfo=UTC),
+                "past_end": datetime(2026, 2, 10, 11, 0, tzinfo=UTC),
+                "inactive_start": datetime(2026, 2, 12, 12, 0, tzinfo=UTC),
+                "inactive_end": datetime(2026, 2, 12, 13, 0, tzinfo=UTC),
+            },
+        )
+
+    service = BookingCancellationService(engine)
+    non_owner = service.cancel_by_client(
+        booking_id=42,
+        client_user_id=6001,
+        now=datetime(2026, 2, 11, 10, 0, tzinfo=UTC),
+    )
+    assert non_owner.cancelled is False
+
+    past = service.cancel_by_client(
+        booking_id=43,
+        client_user_id=5001,
+        now=datetime(2026, 2, 11, 10, 0, tzinfo=UTC),
+    )
+    assert past.cancelled is False
+
+    inactive = service.cancel_by_client(
+        booking_id=44,
+        client_user_id=5001,
+        now=datetime(2026, 2, 11, 10, 0, tzinfo=UTC),
+    )
+    assert inactive.cancelled is False
+
+
+def test_master_cancel_requires_reason_and_enforces_ownership() -> None:
+    engine = _setup_availability_schema()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO bookings (id, master_id, client_user_id, service_type, status, slot_start, slot_end)
+                VALUES (45, 1, 5001, 'haircut', 'active', :slot_start, :slot_end)
+                """
+            ),
+            {
+                "slot_start": datetime(2026, 2, 12, 10, 0, tzinfo=UTC),
+                "slot_end": datetime(2026, 2, 12, 11, 0, tzinfo=UTC),
+            },
+        )
+
+    service = BookingCancellationService(engine)
+    no_reason = service.cancel_by_master(
+        booking_id=45,
+        master_user_id=10,
+        reason="   ",
+        now=datetime(2026, 2, 11, 10, 0, tzinfo=UTC),
+    )
+    assert no_reason.cancelled is False
+    assert "причину" in no_reason.message.lower()
+
+    wrong_owner = service.cancel_by_master(
+        booking_id=45,
+        master_user_id=999,
+        reason="Тестовая причина",
+        now=datetime(2026, 2, 11, 10, 0, tzinfo=UTC),
+    )
+    assert wrong_owner.cancelled is False
+
+
+def test_master_cancel_success_persists_reason() -> None:
+    engine = _setup_availability_schema()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO bookings (id, master_id, client_user_id, service_type, status, slot_start, slot_end)
+                VALUES (46, 1, 5001, 'haircut', 'active', :slot_start, :slot_end)
+                """
+            ),
+            {
+                "slot_start": datetime(2026, 2, 12, 12, 0, tzinfo=UTC),
+                "slot_end": datetime(2026, 2, 12, 13, 0, tzinfo=UTC),
+            },
+        )
+
+    service = BookingCancellationService(engine)
+    result = service.cancel_by_master(
+        booking_id=46,
+        master_user_id=10,
+        reason="Мастер заболел",
+        now=datetime(2026, 2, 11, 10, 0, tzinfo=UTC),
+    )
+    assert result.cancelled is True
+    assert result.cancellation_reason == "Мастер заболел"
+
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT status, cancellation_reason FROM bookings WHERE id = 46"),
+        ).mappings().one()
+    assert row["status"] == "cancelled_by_master"
+    assert row["cancellation_reason"] == "Мастер заболел"
+
+
 def test_telegram_booking_flow_start_and_select_steps() -> None:
     engine = _setup_telegram_flow_schema()
     flow = TelegramBookingFlowService(engine)
@@ -384,3 +561,63 @@ def test_telegram_booking_flow_confirm_sends_notifications_and_rejects_second_fu
     )
     assert second["created"] is False
     assert "активная будущая" in str(second["message"])
+
+
+def test_telegram_booking_flow_cancel_sends_notifications_and_rejects_non_owner() -> None:
+    engine = _setup_telegram_flow_schema()
+    flow = TelegramBookingFlowService(engine)
+
+    created = flow.confirm(
+        client_telegram_user_id=2000001,
+        master_id=1,
+        service_type="haircut",
+        slot_start=datetime(2026, 2, 12, 10, 0, tzinfo=UTC),
+    )
+    booking_id = int(created["booking_id"])
+
+    cancelled = flow.cancel(client_telegram_user_id=2000001, booking_id=booking_id)
+    assert cancelled["cancelled"] is True
+    notifications = cancelled["notifications"]
+    assert isinstance(notifications, list)
+    assert len(notifications) == 2
+    recipients = {item["recipient_telegram_user_id"] for item in notifications}
+    assert recipients == {2000001, 1000001}
+
+    rejected = flow.cancel(client_telegram_user_id=2000002, booking_id=booking_id)
+    assert rejected["cancelled"] is False
+
+
+def test_telegram_master_cancel_sends_reason_to_client_and_rejects_without_reason() -> None:
+    engine = _setup_telegram_flow_schema()
+    flow = TelegramBookingFlowService(engine)
+
+    created = flow.confirm(
+        client_telegram_user_id=2000001,
+        master_id=1,
+        service_type="haircut",
+        slot_start=datetime(2026, 2, 13, 10, 0, tzinfo=UTC),
+    )
+    booking_id = int(created["booking_id"])
+
+    no_reason = flow.cancel_by_master(
+        master_telegram_user_id=1000001,
+        booking_id=booking_id,
+        reason=" ",
+    )
+    assert no_reason["cancelled"] is False
+
+    cancelled = flow.cancel_by_master(
+        master_telegram_user_id=1000001,
+        booking_id=booking_id,
+        reason="Непредвиденные обстоятельства",
+    )
+    assert cancelled["cancelled"] is True
+    notifications = cancelled["notifications"]
+    assert isinstance(notifications, list)
+    assert len(notifications) == 2
+    recipients = {item["recipient_telegram_user_id"] for item in notifications}
+    assert recipients == {2000001, 1000001}
+    client_message = next(
+        item["message"] for item in notifications if item["recipient_telegram_user_id"] == 2000001
+    )
+    assert "Непредвиденные обстоятельства" in client_message

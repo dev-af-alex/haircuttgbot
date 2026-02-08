@@ -6,11 +6,11 @@ from datetime import UTC, datetime, time, timedelta
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
+from app.booking.contracts import BOOKING_STATUS_ACTIVE
 from app.booking.messages import RU_BOOKING_MESSAGES
 from app.booking.service_options import SERVICE_OPTION_CODES
 
 SLOT_DURATION = timedelta(minutes=60)
-ACTIVE_STATUS = "active"
 
 
 @dataclass(frozen=True)
@@ -103,7 +103,7 @@ class BookingService:
                 ),
                 {
                     "client_user_id": client_user_id,
-                    "status": ACTIVE_STATUS,
+                    "status": BOOKING_STATUS_ACTIVE,
                     "now_at": now_utc,
                 },
             ).first()
@@ -124,7 +124,7 @@ class BookingService:
                 ),
                 {
                     "master_id": master_id,
-                    "status": ACTIVE_STATUS,
+                    "status": BOOKING_STATUS_ACTIVE,
                     "slot_start": slot_start_utc,
                     "slot_end": slot_end_utc,
                 },
@@ -166,7 +166,7 @@ class BookingService:
                     "service_type": service_type,
                     "slot_start": slot_start_utc,
                     "slot_end": slot_end_utc,
-                    "status": ACTIVE_STATUS,
+                    "status": BOOKING_STATUS_ACTIVE,
                 },
             ).scalar_one()
 
