@@ -1,6 +1,6 @@
 # EPIC-005 — Cancellation and notification flow
 
-Status: IN_PROGRESS
+Status: DONE
 
 ## Goal
 
@@ -43,3 +43,17 @@ Implement cancellation scenarios for client and master roles, including mandator
 - Group 01: client cancellation baseline (own booking only) + confirmation notification.
 - Group 02: master cancellation with mandatory reason + ownership guardrails.
 - Group 03: smoke/doc sync and acceptance hardening.
+
+## Delivered
+
+- Client cancellation flow with ownership and active-future booking checks.
+- Master cancellation flow with mandatory reason and master-ownership enforcement.
+- Notification payloads for both cancellation initiators, including reason propagation to client for master-initiated cancellations.
+- Updated local smoke runbook covering client cancellation success and master-without-reason rejection.
+
+## Closure verification (2026-02-08)
+
+- All tasks in `tasks.md` are `DONE`.
+- All PR groups (`group-01`, `group-02`, `group-03`) are `DONE`.
+- Local merge gates validated: `docker compose up -d --build`, updated smoke, and `.venv/bin/pytest -q`.
+- Intentional deviations: CI status and security scans (Bandit, pip-audit, Gitleaks) are not executed locally and are expected on PR pipeline.

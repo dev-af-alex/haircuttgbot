@@ -50,7 +50,7 @@ Rules:
     - Local-run impact: smoke test extends from health checks to end-to-end booking creation via bot.
     - Delivered: service option catalog, availability/read + booking/create flow, Telegram client booking-flow contracts, confirmation notifications, and extended local smoke for success/reject scenarios.
 
-- EPIC-005 — Cancellation and notification flow — Status: IN_PROGRESS
+- EPIC-005 — Cancellation and notification flow — Status: DONE
     - Goal: implement cancel scenarios for both roles, including mandatory reason from master.
     - Acceptance:
         - Client can cancel own active booking.
@@ -58,6 +58,7 @@ Rules:
         - Cancellation notifications are delivered to affected participants with correct context.
     - Dependencies: EPIC-004.
     - Local-run impact: local smoke covers both client and master cancellation paths.
+    - Delivered: client self-cancellation flow, master cancellation with mandatory reason and ownership checks, reasoned cancellation notifications, and updated local smoke coverage for cancel success/reject paths.
 
 - EPIC-006 — Master schedule management — Status: TODO
     - Goal: allow masters to manage schedule directly in Telegram (manual bookings, day off, lunch break updates).
