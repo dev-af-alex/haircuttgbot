@@ -1,0 +1,5 @@
+services:
+  dev-placeholder:
+    image: nginxdemos/hello:latest
+    ports:
+      - "8080:80"
