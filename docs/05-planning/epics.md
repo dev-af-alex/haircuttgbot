@@ -30,7 +30,7 @@ Rules:
     - Local-run impact: local `docker compose up -d` provisions a usable database state for bot scenarios.
     - Delivered: Alembic migration baseline, core relational schema + constraints, automatic compose migration job, and seed flow with 2 masters.
 
-- EPIC-003 — Telegram auth + role enforcement — Status: TODO
+- EPIC-003 — Telegram auth + role enforcement — Status: DONE
     - Goal: wire Telegram bot identity and enforce command-level RBAC for `Client` and `Master`.
     - Acceptance:
         - Telegram user ID mapping to role is persisted and validated on every protected command.
@@ -38,6 +38,7 @@ Rules:
         - Russian-language command/menu baseline is available for both roles.
     - Dependencies: EPIC-001, EPIC-002.
     - Local-run impact: local bot interaction now requires role-aware flows and test accounts.
+    - Delivered: DB-backed role mapping, RBAC authorization endpoint, ru auth messages, and automated RBAC tests.
 
 - EPIC-004 — Client booking flow — Status: TODO
     - Goal: deliver client journey for viewing availability and creating bookings with service selection.
