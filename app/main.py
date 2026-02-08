@@ -9,7 +9,14 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 from app.auth import RoleRepository, authorize_command
-from app.booking import AvailabilityService, BookingService, TelegramBookingFlowService, list_service_options
+from app.booking import (
+    AvailabilityService,
+    BookingService,
+    MasterDayOffCommand,
+    MasterScheduleService,
+    TelegramBookingFlowService,
+    list_service_options,
+)
 from app.db.session import get_engine
 
 LOGGER = logging.getLogger("bot_api")
@@ -85,6 +92,26 @@ class TelegramFlowMasterCancelRequest(BaseModel):
     master_telegram_user_id: int
     booking_id: int
     reason: str
+
+
+class TelegramMasterDayOffUpsertRequest(BaseModel):
+    master_telegram_user_id: int
+    start_at: datetime
+    end_at: datetime
+    block_id: int | None = None
+
+
+class TelegramMasterLunchUpdateRequest(BaseModel):
+    master_telegram_user_id: int
+    lunch_start: str
+    lunch_end: str
+
+
+class TelegramMasterManualBookingRequest(BaseModel):
+    master_telegram_user_id: int
+    client_name: str
+    service_type: str
+    slot_start: datetime
 
 
 @app.get("/health")
@@ -205,3 +232,22 @@ def telegram_master_booking_flow_cancel(payload: TelegramFlowMasterCancelRequest
         booking_id=payload.booking_id,
         reason=payload.reason,
     )
+
+
+@app.post("/internal/telegram/master/schedule/day-off")
+def telegram_master_schedule_day_off(payload: TelegramMasterDayOffUpsertRequest) -> dict[str, object]:
+    service = MasterScheduleService(get_engine())
+    result = service.upsert_day_off(
+        master_telegram_user_id=payload.master_telegram_user_id,
+        command=MasterDayOffCommand(
+            start_at=payload.start_at,
+            end_at=payload.end_at,
+            block_id=payload.block_id,
+        ),
+    )
+    return {
+        "applied": result.applied,
+        "created": result.created,
+        "block_id": result.block_id,
+        "message": result.message,
+    }

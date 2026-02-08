@@ -17,6 +17,12 @@ from app.booking.contracts import (
 )
 from app.booking.create_booking import BookingService
 from app.booking.flow import TelegramBookingFlowService
+from app.booking.schedule import (
+    MasterDayOffCommand,
+    MasterLunchBreakCommand,
+    MasterManualBookingCommand,
+    MasterScheduleService,
+)
 from app.booking.service_options import (
     SERVICE_OPTION_CODES,
     SERVICE_OPTION_LABELS_RU,
@@ -67,8 +73,10 @@ def _setup_availability_schema() -> Engine:
                 CREATE TABLE availability_blocks (
                     id INTEGER PRIMARY KEY,
                     master_id INTEGER NOT NULL,
+                    block_type TEXT,
                     start_at DATETIME NOT NULL,
-                    end_at DATETIME NOT NULL
+                    end_at DATETIME NOT NULL,
+                    reason TEXT
                 )
                 """
             )
@@ -140,8 +148,10 @@ def _setup_telegram_flow_schema() -> Engine:
                 CREATE TABLE availability_blocks (
                     id INTEGER PRIMARY KEY,
                     master_id INTEGER NOT NULL,
+                    block_type TEXT,
                     start_at DATETIME NOT NULL,
-                    end_at DATETIME NOT NULL
+                    end_at DATETIME NOT NULL,
+                    reason TEXT
                 )
                 """
             )
@@ -511,6 +521,123 @@ def test_master_cancel_success_persists_reason() -> None:
         ).mappings().one()
     assert row["status"] == "cancelled_by_master"
     assert row["cancellation_reason"] == "Мастер заболел"
+
+
+def test_master_schedule_contracts_and_ownership_resolution() -> None:
+    engine = _setup_telegram_flow_schema()
+    service = MasterScheduleService(engine)
+
+    day_off = MasterDayOffCommand(
+        start_at=datetime(2026, 2, 14, 15, 0, tzinfo=UTC),
+        end_at=datetime(2026, 2, 14, 17, 0, tzinfo=UTC),
+    )
+    lunch = MasterLunchBreakCommand(lunch_start=datetime.strptime("13:00", "%H:%M").time(), lunch_end=datetime.strptime("14:00", "%H:%M").time())
+    manual = MasterManualBookingCommand(
+        client_name="Client Demo",
+        service_type="haircut",
+        slot_start=datetime(2026, 2, 14, 12, 0, tzinfo=UTC),
+    )
+
+    assert day_off.block_id is None
+    assert lunch.lunch_start.hour == 13
+    assert manual.client_name == "Client Demo"
+
+    context = service.resolve_context(master_telegram_user_id=1000001)
+    assert context is not None
+    assert context.master_id == 1
+
+
+def test_master_day_off_create_and_update_affect_availability() -> None:
+    engine = _setup_telegram_flow_schema()
+    service = MasterScheduleService(engine)
+    availability = AvailabilityService(engine)
+
+    created = service.upsert_day_off(
+        master_telegram_user_id=1000001,
+        command=MasterDayOffCommand(
+            start_at=datetime(2026, 2, 14, 15, 0, tzinfo=UTC),
+            end_at=datetime(2026, 2, 14, 17, 0, tzinfo=UTC),
+        ),
+    )
+    assert created.applied is True
+    assert created.created is True
+    assert created.block_id is not None
+
+    slots_after_create = availability.list_slots(
+        master_id=1,
+        on_date=date(2026, 2, 14),
+        now=datetime(2026, 2, 14, 9, 0, tzinfo=UTC),
+    )
+    starts_after_create = {slot.start_at.strftime("%H:%M") for slot in slots_after_create}
+    assert "15:00" not in starts_after_create
+    assert "16:00" not in starts_after_create
+
+    updated = service.upsert_day_off(
+        master_telegram_user_id=1000001,
+        command=MasterDayOffCommand(
+            block_id=created.block_id,
+            start_at=datetime(2026, 2, 14, 16, 0, tzinfo=UTC),
+            end_at=datetime(2026, 2, 14, 18, 0, tzinfo=UTC),
+        ),
+    )
+    assert updated.applied is True
+    assert updated.created is False
+
+    slots_after_update = availability.list_slots(
+        master_id=1,
+        on_date=date(2026, 2, 14),
+        now=datetime(2026, 2, 14, 9, 0, tzinfo=UTC),
+    )
+    starts_after_update = {slot.start_at.strftime("%H:%M") for slot in slots_after_update}
+    assert "15:00" in starts_after_update
+    assert "16:00" not in starts_after_update
+    assert "17:00" not in starts_after_update
+
+
+def test_master_day_off_rejects_invalid_conflict_and_non_owner_update() -> None:
+    engine = _setup_telegram_flow_schema()
+    service = MasterScheduleService(engine)
+
+    invalid = service.upsert_day_off(
+        master_telegram_user_id=1000001,
+        command=MasterDayOffCommand(
+            start_at=datetime(2026, 2, 14, 17, 0, tzinfo=UTC),
+            end_at=datetime(2026, 2, 14, 15, 0, tzinfo=UTC),
+        ),
+    )
+    assert invalid.applied is False
+    assert "Некорректный" in invalid.message
+
+    first = service.upsert_day_off(
+        master_telegram_user_id=1000001,
+        command=MasterDayOffCommand(
+            start_at=datetime(2026, 2, 14, 15, 0, tzinfo=UTC),
+            end_at=datetime(2026, 2, 14, 17, 0, tzinfo=UTC),
+        ),
+    )
+    assert first.applied is True
+    assert first.block_id is not None
+
+    overlap = service.upsert_day_off(
+        master_telegram_user_id=1000001,
+        command=MasterDayOffCommand(
+            start_at=datetime(2026, 2, 14, 16, 0, tzinfo=UTC),
+            end_at=datetime(2026, 2, 14, 18, 0, tzinfo=UTC),
+        ),
+    )
+    assert overlap.applied is False
+    assert "пересекается" in overlap.message
+
+    non_owner_update = service.upsert_day_off(
+        master_telegram_user_id=1000002,
+        command=MasterDayOffCommand(
+            block_id=first.block_id,
+            start_at=datetime(2026, 2, 14, 18, 0, tzinfo=UTC),
+            end_at=datetime(2026, 2, 14, 19, 0, tzinfo=UTC),
+        ),
+    )
+    assert non_owner_update.applied is False
+    assert "не найден" in non_owner_update.message.lower()
 
 
 def test_telegram_booking_flow_start_and_select_steps() -> None:

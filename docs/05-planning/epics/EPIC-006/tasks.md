@@ -3,7 +3,7 @@
 Legend: TODO / IN_PROGRESS / DONE
 Sizing target: each task is 1-3 dev-days.
 
-- T-001 — Define master schedule command and ownership contracts — Status: TODO
+- T-001 — Define master schedule command and ownership contracts — Status: DONE
   - Scope: define request/response contracts for master schedule commands and ownership resolution for target master profile.
   - Acceptance:
     - contracts cover day-off, lunch-break update, and manual-booking command payloads.
@@ -11,7 +11,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 1 dev-day
   - Dependencies: none
 
-- T-002 — Implement day-off write path for master — Status: TODO
+- T-002 — Implement day-off write path for master — Status: DONE
   - Scope: add use case for creating/updating master day-off intervals as availability blocks.
   - Acceptance:
     - master can create day-off interval for own profile.
@@ -19,7 +19,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 2 dev-days
   - Dependencies: T-001
 
-- T-003 — Recompute availability against day-off updates — Status: TODO
+- T-003 — Recompute availability against day-off updates — Status: DONE
   - Scope: ensure client availability endpoints reflect day-off changes immediately.
   - Acceptance:
     - day-off intervals are excluded from available slots after update.

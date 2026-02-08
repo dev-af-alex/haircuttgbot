@@ -17,4 +17,10 @@ RU_BOOKING_MESSAGES = {
     "booking_cancelled_master": "Клиент отменил запись.",
     "booking_cancelled_by_master_client_prefix": "Мастер отменил запись. Причина: {reason}",
     "booking_cancelled_by_master_master": "Запись клиента отменена.",
+    "day_off_created": "Выходной интервал сохранен.",
+    "day_off_updated": "Выходной интервал обновлен.",
+    "day_off_conflict": "Выходной интервал пересекается с существующим выходным.",
+    "day_off_invalid_interval": "Некорректный интервал выходного.",
+    "day_off_not_found": "Выходной интервал не найден.",
+    "day_off_reason_default": "master_day_off",
 }

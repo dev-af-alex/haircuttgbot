@@ -114,3 +114,24 @@
   - Behavior notes:
     - Rejects cancellation if reason is empty/whitespace.
     - Rejects cancellation for bookings outside master ownership.
+
+- Master schedule command contracts (baseline)
+  - `day_off`: `{"master_telegram_user_id":1000001,"start_at":"2026-02-14T15:00:00+00:00","end_at":"2026-02-14T17:00:00+00:00","block_id":null}`
+  - `lunch_update` (planned next group): `{"master_telegram_user_id":1000001,"lunch_start":"13:00","lunch_end":"14:00"}`
+  - `manual_booking` (planned next groups): `{"master_telegram_user_id":1000001,"client_name":"Client Demo","service_type":"haircut","slot_start":"2026-02-14T12:00:00+00:00"}`
+  - Ownership resolution: every master schedule command resolves `master_telegram_user_id -> users.id -> masters.id` and applies changes only to that master profile.
+
+- `POST /internal/telegram/master/schedule/day-off`
+  - Purpose: create/update master day-off interval as availability block for own profile.
+  - Request:
+    `{"master_telegram_user_id":1000001,"start_at":"2026-02-14T15:00:00+00:00","end_at":"2026-02-14T17:00:00+00:00","block_id":null}`
+  - Response `200` (create success):
+    `{"applied":true,"created":true,"block_id":101,"message":"Выходной интервал сохранен."}`
+  - Response `200` (update success):
+    `{"applied":true,"created":false,"block_id":101,"message":"Выходной интервал обновлен."}`
+  - Response `200` (rejected example):
+    `{"applied":false,"created":false,"block_id":null,"message":"Выходной интервал пересекается с существующим выходным."}`
+  - Behavior notes:
+    - Rejects invalid interval (`start_at >= end_at`).
+    - Rejects overlapping day-off intervals for the same master.
+    - Updated day-off interval is immediately reflected in `POST /internal/availability/slots`.

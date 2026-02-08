@@ -11,6 +11,14 @@ from app.booking.contracts import (
 from app.booking.create_booking import BookingCreateResult, BookingService
 from app.booking.flow import BookingFlowRepository, BookingNotification, BookingNotificationService, TelegramBookingFlowService
 from app.booking.messages import RU_BOOKING_MESSAGES
+from app.booking.schedule import (
+    MasterDayOffCommand,
+    MasterDayOffResult,
+    MasterLunchBreakCommand,
+    MasterManualBookingCommand,
+    MasterScheduleContext,
+    MasterScheduleService,
+)
 from app.booking.service_options import (
     SERVICE_OPTION_CODES,
     SERVICE_OPTION_HAIRCUT,
@@ -29,6 +37,12 @@ __all__ = [
     "BookingFlowRepository",
     "BookingNotification",
     "BookingNotificationService",
+    "MasterDayOffCommand",
+    "MasterDayOffResult",
+    "MasterLunchBreakCommand",
+    "MasterManualBookingCommand",
+    "MasterScheduleContext",
+    "MasterScheduleService",
     "BOOKING_STATUS_ACTIVE",
     "BOOKING_STATUS_CANCELLED_BY_CLIENT",
     "BOOKING_STATUS_CANCELLED_BY_MASTER",
