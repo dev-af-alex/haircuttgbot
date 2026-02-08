@@ -1,6 +1,6 @@
 # EPIC-001 — Runtime skeleton + CI security gates
 
-Status: IN_PROGRESS
+Status: DONE
 
 ## Goal
 
@@ -35,3 +35,9 @@ Replace placeholder local setup with a real runnable baseline (`bot-api`, `postg
 - Compose/runtime files and minimal app skeleton.
 - CI workflow files for security gates.
 - Updated delivery documentation.
+
+## Delivered
+
+- Real local runtime baseline via `docker-compose` with `bot-api`, `postgres`, and `redis`.
+- Health endpoint contract and smoke test procedure.
+- CI workflow with `pytest`, Bandit, pip-audit, and Gitleaks.

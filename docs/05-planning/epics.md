@@ -10,7 +10,7 @@ Rules:
 
 ## Epics
 
-- EPIC-001 — Runtime skeleton + CI security gates — Status: IN_PROGRESS
+- EPIC-001 — Runtime skeleton + CI security gates — Status: DONE
     - Goal: replace placeholder setup with runnable bot-api/postgres/redis skeleton and mandatory CI security checks.
     - Acceptance:
         - `docker compose up -d` starts `bot-api`, `postgres`, and `redis` with health checks.
@@ -18,6 +18,7 @@ Rules:
         - CI runs Bandit, pip-audit, and Gitleaks on pull requests and fails on configured severity threshold.
     - Dependencies: tech stack selected in `docs/03-architecture/tech-stack.md`.
     - Local-run impact: introduces first real local runtime; all next epics build on this compose baseline.
+    - Delivered: real compose runtime (`bot-api` + `postgres` + `redis`), health smoke test, and CI baseline with Bandit + pip-audit + Gitleaks.
 
 - EPIC-002 — Data model + migration baseline — Status: TODO
     - Goal: implement relational schema and migrations for roles, masters, clients, bookings, availability blocks, and audit events.
