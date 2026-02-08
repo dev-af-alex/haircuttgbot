@@ -41,8 +41,8 @@ def _setup_availability_schema() -> Engine:
                     client_user_id INTEGER,
                     service_type TEXT,
                     status TEXT NOT NULL,
-                    slot_start TEXT NOT NULL,
-                    slot_end TEXT NOT NULL
+                    slot_start DATETIME NOT NULL,
+                    slot_end DATETIME NOT NULL
                 )
                 """
             )
@@ -53,8 +53,8 @@ def _setup_availability_schema() -> Engine:
                 CREATE TABLE availability_blocks (
                     id INTEGER PRIMARY KEY,
                     master_id INTEGER NOT NULL,
-                    start_at TEXT NOT NULL,
-                    end_at TEXT NOT NULL
+                    start_at DATETIME NOT NULL,
+                    end_at DATETIME NOT NULL
                 )
                 """
             )
@@ -87,19 +87,29 @@ def test_availability_excludes_past_lunch_booking_and_blocks() -> None:
             text(
                 """
                 INSERT INTO bookings (master_id, status, slot_start, slot_end)
-                VALUES (1, 'active', '2026-02-09T11:00:00+00:00', '2026-02-09T12:00:00+00:00')
+                VALUES (1, 'active', :slot_start, :slot_end)
                 """
-            )
+            ),
+            {
+                "slot_start": datetime(2026, 2, 9, 11, 0, tzinfo=UTC),
+                "slot_end": datetime(2026, 2, 9, 12, 0, tzinfo=UTC),
+            },
         )
         conn.execute(
             text(
                 """
                 INSERT INTO availability_blocks (master_id, start_at, end_at)
                 VALUES
-                    (1, '2026-02-09T15:00:00+00:00', '2026-02-09T16:00:00+00:00'),
-                    (1, '2026-02-09T18:00:00+00:00', '2026-02-09T20:00:00+00:00')
+                    (1, :block_1_start, :block_1_end),
+                    (1, :block_2_start, :block_2_end)
                 """
-            )
+            ),
+            {
+                "block_1_start": datetime(2026, 2, 9, 15, 0, tzinfo=UTC),
+                "block_1_end": datetime(2026, 2, 9, 16, 0, tzinfo=UTC),
+                "block_2_start": datetime(2026, 2, 9, 18, 0, tzinfo=UTC),
+                "block_2_end": datetime(2026, 2, 9, 20, 0, tzinfo=UTC),
+            },
         )
 
     service = AvailabilityService(engine)
@@ -123,10 +133,16 @@ def test_availability_half_open_overlap_boundaries() -> None:
                 """
                 INSERT INTO availability_blocks (master_id, start_at, end_at)
                 VALUES
-                    (1, '2026-02-10T14:00:00+00:00', '2026-02-10T15:00:00+00:00'),
-                    (1, '2026-02-10T16:00:00+00:00', '2026-02-10T17:00:00+00:00')
+                    (1, :block_1_start, :block_1_end),
+                    (1, :block_2_start, :block_2_end)
                 """
-            )
+            ),
+            {
+                "block_1_start": datetime(2026, 2, 10, 14, 0, tzinfo=UTC),
+                "block_1_end": datetime(2026, 2, 10, 15, 0, tzinfo=UTC),
+                "block_2_start": datetime(2026, 2, 10, 16, 0, tzinfo=UTC),
+                "block_2_end": datetime(2026, 2, 10, 17, 0, tzinfo=UTC),
+            },
         )
 
     service = AvailabilityService(engine)
@@ -179,9 +195,13 @@ def test_create_booking_rejects_overlapping_master_slot() -> None:
             text(
                 """
                 INSERT INTO bookings (master_id, client_user_id, service_type, status, slot_start, slot_end)
-                VALUES (1, 9001, 'beard', 'active', '2026-02-11T10:00:00+00:00', '2026-02-11T11:00:00+00:00')
+                VALUES (1, 9001, 'beard', 'active', :slot_start, :slot_end)
                 """
-            )
+            ),
+            {
+                "slot_start": datetime(2026, 2, 11, 10, 0, tzinfo=UTC),
+                "slot_end": datetime(2026, 2, 11, 11, 0, tzinfo=UTC),
+            },
         )
 
     service = BookingService(engine)
@@ -205,9 +225,13 @@ def test_create_booking_rejects_second_future_booking_for_client() -> None:
             text(
                 """
                 INSERT INTO bookings (master_id, client_user_id, service_type, status, slot_start, slot_end)
-                VALUES (1, 5001, 'beard', 'active', '2026-02-11T12:00:00+00:00', '2026-02-11T13:00:00+00:00')
+                VALUES (1, 5001, 'beard', 'active', :slot_start, :slot_end)
                 """
-            )
+            ),
+            {
+                "slot_start": datetime(2026, 2, 11, 12, 0, tzinfo=UTC),
+                "slot_end": datetime(2026, 2, 11, 13, 0, tzinfo=UTC),
+            },
         )
 
     service = BookingService(engine)
