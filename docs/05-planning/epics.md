@@ -40,7 +40,7 @@ Rules:
     - Local-run impact: local bot interaction now requires role-aware flows and test accounts.
     - Delivered: DB-backed role mapping, RBAC authorization endpoint, ru auth messages, and automated RBAC tests.
 
-- EPIC-004 — Client booking flow — Status: TODO
+- EPIC-004 — Client booking flow — Status: IN_PROGRESS
     - Goal: deliver client journey for viewing availability and creating bookings with service selection.
     - Acceptance:
         - Client can select master and service option (haircut, beard, haircut+beard).

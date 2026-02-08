@@ -1,12 +1,14 @@
 import json
 import logging
 import os
+from datetime import date, datetime
 
 from aiogram import Dispatcher
 from fastapi import FastAPI
 from pydantic import BaseModel
 
 from app.auth import RoleRepository, authorize_command
+from app.booking import AvailabilityService, BookingService, list_service_options
 from app.db.session import get_engine
 
 LOGGER = logging.getLogger("bot_api")
@@ -22,6 +24,18 @@ class ResolveRoleRequest(BaseModel):
 class AuthorizeCommandRequest(BaseModel):
     telegram_user_id: int
     command: str
+
+
+class AvailabilityRequest(BaseModel):
+    master_id: int
+    date: date
+
+
+class CreateBookingRequest(BaseModel):
+    master_id: int
+    client_user_id: int
+    service_type: str
+    slot_start: datetime
 
 
 @app.on_event("startup")
@@ -78,4 +92,38 @@ def authorize(payload: AuthorizeCommandRequest) -> dict[str, str | bool | None]:
         "allowed": decision.allowed,
         "role": role,
         "message": decision.message,
+    }
+
+
+@app.get("/internal/booking/service-options")
+def service_options() -> dict[str, list[dict[str, str]]]:
+    return {"service_options": list_service_options()}
+
+
+@app.post("/internal/availability/slots")
+def availability_slots(payload: AvailabilityRequest) -> dict[str, int | list[dict[str, str]]]:
+    service = AvailabilityService(get_engine())
+    slots = service.list_slots(master_id=payload.master_id, on_date=payload.date)
+    return {
+        "slot_minutes": 60,
+        "slots": [
+            {"start_at": slot.start_at.isoformat(), "end_at": slot.end_at.isoformat()}
+            for slot in slots
+        ],
+    }
+
+
+@app.post("/internal/booking/create")
+def create_booking(payload: CreateBookingRequest) -> dict[str, int | str | bool | None]:
+    service = BookingService(get_engine())
+    result = service.create_booking(
+        master_id=payload.master_id,
+        client_user_id=payload.client_user_id,
+        service_type=payload.service_type,
+        slot_start=payload.slot_start,
+    )
+    return {
+        "created": result.created,
+        "booking_id": result.booking_id,
+        "message": result.message,
     }

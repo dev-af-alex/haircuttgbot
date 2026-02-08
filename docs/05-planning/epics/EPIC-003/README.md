@@ -35,3 +35,10 @@ Implement Telegram identity resolution and command-level RBAC enforcement for `C
 - RBAC decision endpoint (`/internal/commands/authorize`) with deny logging.
 - Russian auth/permission messages for allowed/forbidden/unknown-user paths.
 - Automated tests for RBAC decisions and role repository behavior.
+
+## Closure verification (2026-02-08)
+
+- All tasks in `tasks.md` are `DONE`.
+- All PR groups are `DONE`.
+- PR and doc-sync merge gates are satisfied.
+- Intentional deviations: none.

@@ -41,3 +41,10 @@ Implement the initial relational model and migration flow for users/roles, maste
 - Automatic migration execution in compose lifecycle via `migrate` one-shot service.
 - Idempotent seed script with two master profiles for smoke scenarios.
 - CI schema regression check (`alembic upgrade head` on ephemeral Postgres).
+
+## Closure verification (2026-02-08)
+
+- All tasks in `tasks.md` are `DONE`.
+- All PR groups are `DONE`.
+- PR and doc-sync merge gates are satisfied.
+- Intentional deviations: none.

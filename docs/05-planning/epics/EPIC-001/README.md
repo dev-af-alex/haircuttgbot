@@ -41,3 +41,10 @@ Replace placeholder local setup with a real runnable baseline (`bot-api`, `postg
 - Real local runtime baseline via `docker-compose` with `bot-api`, `postgres`, and `redis`.
 - Health endpoint contract and smoke test procedure.
 - CI workflow with `pytest`, Bandit, pip-audit, and Gitleaks.
+
+## Closure verification (2026-02-08)
+
+- All tasks in `tasks.md` are `DONE`.
+- All PR groups are `DONE`.
+- PR and doc-sync merge gates are satisfied.
+- Intentional deviation: PR Group 01 shipped without unit tests; runtime bootstrap was validated by compose health checks and smoke test, and automated checks were added in PR Group 02.
