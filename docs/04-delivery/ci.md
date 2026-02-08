@@ -10,20 +10,35 @@ Merge strategy: merge-commit.
 - **Dependency scan** (mandatory)
 - **Secrets scan** (mandatory)
 
-## Minimum expectations for security gates
+## Implemented baseline (EPIC-001)
 
-- SAST: runs on every PR and on default branch
-- Dependency scan: fails on critical/high according to your policy (define policy)
-- Secrets scan: blocks on detected secrets; add allow-list policy if needed
+- Workflow file: `.github/workflows/ci.yml`
+- Trigger: every `pull_request` and push to `master`
+- Python version: `3.12`
 
-## Suggested documentation to add per tool
+Security tools:
 
-For each gate, document:
+- SAST: `bandit` (runs `bandit -q -r app`)
+- Dependency scan: `pip-audit` (runs `pip-audit` and fails on known vulnerabilities)
+- Secrets scan: `gitleaks/gitleaks-action@v2`
 
-- tool name + version
-- config file path
-- how to run locally (command)
-- how to interpret failures
+## Local reproduction commands
+
+Run from repository root:
+
+1. `python -m pip install --upgrade pip`
+2. `pip install -r requirements.txt`
+3. `pip install pytest bandit pip-audit`
+4. `pytest -q`
+5. `bandit -q -r app`
+6. `pip-audit`
+
+## Failure interpretation
+
+- `pytest` failure: regression in runtime skeleton contract or imports.
+- `bandit` failure: potential code security issue in `app/`.
+- `pip-audit` failure: vulnerable dependency detected; upgrade dependency or document approved exception.
+- `gitleaks` failure: potential secret committed; remove secret and rotate if exposed.
 
 ## Branch / PR policy
 

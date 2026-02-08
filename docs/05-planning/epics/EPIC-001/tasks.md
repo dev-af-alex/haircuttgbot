@@ -29,7 +29,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 1 dev-day
   - Dependencies: T-001, T-002
 
-- T-004 — Wire CI security gates (Bandit, pip-audit, Gitleaks) — Status: TODO
+- T-004 — Wire CI security gates (Bandit, pip-audit, Gitleaks) — Status: DONE
   - Scope: add CI workflow/jobs and baseline fail policy.
   - Acceptance:
     - PR CI executes all 3 scanners.
@@ -38,7 +38,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 2 dev-days
   - Dependencies: T-002
 
-- T-005 — Add baseline tests/checks for runtime skeleton — Status: TODO
+- T-005 — Add baseline tests/checks for runtime skeleton — Status: DONE
   - Scope: add lightweight checks to protect local startup and health contract.
   - Acceptance:
     - automated check validates app health endpoint contract.
@@ -46,7 +46,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 1 dev-day
   - Dependencies: T-002
 
-- T-006 — Final doc-sync and epic acceptance verification — Status: TODO
+- T-006 — Final doc-sync and epic acceptance verification — Status: DONE
   - Scope: ensure checklists/doc-sync requirements are met for EPIC-001 output.
   - Acceptance:
     - all changed interfaces/workflows reflected in docs.
