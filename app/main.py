@@ -2,7 +2,7 @@ import json
 import logging
 import os
 from contextlib import asynccontextmanager
-from datetime import date, datetime
+from datetime import date, datetime, time
 
 from aiogram import Dispatcher
 from fastapi import FastAPI
@@ -13,6 +13,8 @@ from app.booking import (
     AvailabilityService,
     BookingService,
     MasterDayOffCommand,
+    MasterLunchBreakCommand,
+    MasterManualBookingCommand,
     MasterScheduleService,
     TelegramBookingFlowService,
     list_service_options,
@@ -103,8 +105,8 @@ class TelegramMasterDayOffUpsertRequest(BaseModel):
 
 class TelegramMasterLunchUpdateRequest(BaseModel):
     master_telegram_user_id: int
-    lunch_start: str
-    lunch_end: str
+    lunch_start: time
+    lunch_end: time
 
 
 class TelegramMasterManualBookingRequest(BaseModel):
@@ -249,5 +251,39 @@ def telegram_master_schedule_day_off(payload: TelegramMasterDayOffUpsertRequest)
         "applied": result.applied,
         "created": result.created,
         "block_id": result.block_id,
+        "message": result.message,
+    }
+
+
+@app.post("/internal/telegram/master/schedule/lunch")
+def telegram_master_schedule_lunch(payload: TelegramMasterLunchUpdateRequest) -> dict[str, object]:
+    service = MasterScheduleService(get_engine())
+    result = service.update_lunch_break(
+        master_telegram_user_id=payload.master_telegram_user_id,
+        command=MasterLunchBreakCommand(
+            lunch_start=payload.lunch_start,
+            lunch_end=payload.lunch_end,
+        ),
+    )
+    return {
+        "applied": result.applied,
+        "message": result.message,
+    }
+
+
+@app.post("/internal/telegram/master/schedule/manual-booking")
+def telegram_master_schedule_manual_booking(payload: TelegramMasterManualBookingRequest) -> dict[str, object]:
+    service = MasterScheduleService(get_engine())
+    result = service.create_manual_booking(
+        master_telegram_user_id=payload.master_telegram_user_id,
+        command=MasterManualBookingCommand(
+            client_name=payload.client_name,
+            service_type=payload.service_type,
+            slot_start=payload.slot_start,
+        ),
+    )
+    return {
+        "applied": result.applied,
+        "booking_id": result.booking_id,
         "message": result.message,
     }

@@ -117,8 +117,8 @@
 
 - Master schedule command contracts (baseline)
   - `day_off`: `{"master_telegram_user_id":1000001,"start_at":"2026-02-14T15:00:00+00:00","end_at":"2026-02-14T17:00:00+00:00","block_id":null}`
-  - `lunch_update` (planned next group): `{"master_telegram_user_id":1000001,"lunch_start":"13:00","lunch_end":"14:00"}`
-  - `manual_booking` (planned next groups): `{"master_telegram_user_id":1000001,"client_name":"Client Demo","service_type":"haircut","slot_start":"2026-02-14T12:00:00+00:00"}`
+  - `lunch_update`: `{"master_telegram_user_id":1000001,"lunch_start":"15:00:00","lunch_end":"16:00:00"}`
+  - `manual_booking`: `{"master_telegram_user_id":1000001,"client_name":"Client Demo","service_type":"haircut","slot_start":"2026-02-14T12:00:00+00:00"}`
   - Ownership resolution: every master schedule command resolves `master_telegram_user_id -> users.id -> masters.id` and applies changes only to that master profile.
 
 - `POST /internal/telegram/master/schedule/day-off`
@@ -135,3 +135,29 @@
     - Rejects invalid interval (`start_at >= end_at`).
     - Rejects overlapping day-off intervals for the same master.
     - Updated day-off interval is immediately reflected in `POST /internal/availability/slots`.
+
+- `POST /internal/telegram/master/schedule/lunch`
+  - Purpose: update master lunch-break window for own profile.
+  - Request:
+    `{"master_telegram_user_id":1000001,"lunch_start":"15:00:00","lunch_end":"16:00:00"}`
+  - Response `200` (success):
+    `{"applied":true,"message":"Обеденный перерыв обновлен."}`
+  - Response `200` (rejected example):
+    `{"applied":false,"message":"Длительность обеда должна быть 60 минут."}`
+  - Behavior notes:
+    - Rejects invalid interval (`lunch_start >= lunch_end`).
+    - Rejects non-60-minute duration and intervals outside master work window.
+    - Updated lunch interval is enforced by `POST /internal/availability/slots` and `POST /internal/booking/create`.
+
+- `POST /internal/telegram/master/schedule/manual-booking`
+  - Purpose: create master-owned manual booking for offline request.
+  - Request:
+    `{"master_telegram_user_id":1000001,"client_name":"Client Demo","service_type":"haircut","slot_start":"2026-02-16T12:00:00+00:00"}`
+  - Response `200` (success):
+    `{"applied":true,"booking_id":200,"message":"Ручная запись создана."}`
+  - Response `200` (rejected example):
+    `{"applied":false,"booking_id":null,"message":"Слот для ручной записи недоступен."}`
+  - Behavior notes:
+    - Applies ownership check to target master profile.
+    - Rejects overlap with active bookings, day-off blocks, and lunch interval.
+    - Created manual booking occupies slot for subsequent availability and booking checks.

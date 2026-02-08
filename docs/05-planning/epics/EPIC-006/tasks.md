@@ -27,7 +27,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 1 dev-day
   - Dependencies: T-002
 
-- T-004 — Implement lunch break update flow — Status: TODO
+- T-004 — Implement lunch break update flow — Status: DONE
   - Scope: add master use case for changing lunch break window with validation against work hours.
   - Acceptance:
     - lunch update persists for target master.
@@ -35,7 +35,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 2 dev-days
   - Dependencies: T-001
 
-- T-005 — Apply lunch update to booking/availability validation — Status: TODO
+- T-005 — Apply lunch update to booking/availability validation — Status: DONE
   - Scope: wire updated lunch window into availability and booking conflict checks.
   - Acceptance:
     - booking and availability reject slots overlapping updated lunch window.
@@ -43,7 +43,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 2 dev-days
   - Dependencies: T-004
 
-- T-006 — Add master manual booking flow — Status: TODO
+- T-006 — Add master manual booking flow — Status: DONE
   - Scope: implement Telegram/manual-booking path for master-offline requests with ownership and overlap guards.
   - Acceptance:
     - master can create manual booking for own schedule.
@@ -51,7 +51,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 3 dev-days
   - Dependencies: T-003, T-005
 
-- T-007 — Expand smoke and finalize doc sync for EPIC-006 — Status: TODO
+- T-007 — Expand smoke and finalize doc sync for EPIC-006 — Status: DONE
   - Scope: extend local smoke and synchronize API/planning/delivery docs for master schedule management behavior.
   - Acceptance:
     - smoke includes day-off/lunch-update impact checks and manual-booking scenario.

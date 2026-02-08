@@ -640,6 +640,186 @@ def test_master_day_off_rejects_invalid_conflict_and_non_owner_update() -> None:
     assert "не найден" in non_owner_update.message.lower()
 
 
+def test_master_lunch_update_success_and_validation() -> None:
+    engine = _setup_telegram_flow_schema()
+    service = MasterScheduleService(engine)
+
+    invalid_interval = service.update_lunch_break(
+        master_telegram_user_id=1000001,
+        command=MasterLunchBreakCommand(
+            lunch_start=datetime.strptime("15:00", "%H:%M").time(),
+            lunch_end=datetime.strptime("14:00", "%H:%M").time(),
+        ),
+    )
+    assert invalid_interval.applied is False
+
+    invalid_duration = service.update_lunch_break(
+        master_telegram_user_id=1000001,
+        command=MasterLunchBreakCommand(
+            lunch_start=datetime.strptime("14:00", "%H:%M").time(),
+            lunch_end=datetime.strptime("15:30", "%H:%M").time(),
+        ),
+    )
+    assert invalid_duration.applied is False
+
+    outside_work_hours = service.update_lunch_break(
+        master_telegram_user_id=1000001,
+        command=MasterLunchBreakCommand(
+            lunch_start=datetime.strptime("09:00", "%H:%M").time(),
+            lunch_end=datetime.strptime("10:00", "%H:%M").time(),
+        ),
+    )
+    assert outside_work_hours.applied is False
+
+    updated = service.update_lunch_break(
+        master_telegram_user_id=1000001,
+        command=MasterLunchBreakCommand(
+            lunch_start=datetime.strptime("15:00", "%H:%M").time(),
+            lunch_end=datetime.strptime("16:00", "%H:%M").time(),
+        ),
+    )
+    assert updated.applied is True
+
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT lunch_start, lunch_end FROM masters WHERE id = 1"),
+        ).mappings().one()
+    assert str(row["lunch_start"]).startswith("15:00")
+    assert str(row["lunch_end"]).startswith("16:00")
+
+
+def test_lunch_update_is_applied_to_availability_and_booking_checks() -> None:
+    engine = _setup_telegram_flow_schema()
+    service = MasterScheduleService(engine)
+    availability = AvailabilityService(engine)
+    booking = BookingService(engine)
+
+    lunch_update = service.update_lunch_break(
+        master_telegram_user_id=1000001,
+        command=MasterLunchBreakCommand(
+            lunch_start=datetime.strptime("15:00", "%H:%M").time(),
+            lunch_end=datetime.strptime("16:00", "%H:%M").time(),
+        ),
+    )
+    assert lunch_update.applied is True
+
+    slots = availability.list_slots(
+        master_id=1,
+        on_date=date(2026, 2, 15),
+        now=datetime(2026, 2, 15, 9, 0, tzinfo=UTC),
+    )
+    starts = {slot.start_at.strftime("%H:%M") for slot in slots}
+    assert "15:00" not in starts
+    assert "13:00" in starts
+
+    reject = booking.create_booking(
+        master_id=1,
+        client_user_id=5001,
+        service_type="haircut",
+        slot_start=datetime(2026, 2, 15, 15, 0, tzinfo=UTC),
+        now=datetime(2026, 2, 14, 10, 0, tzinfo=UTC),
+    )
+    assert reject.created is False
+    assert "недоступен" in reject.message
+
+
+def test_master_manual_booking_success_and_availability_exclusion() -> None:
+    engine = _setup_telegram_flow_schema()
+    service = MasterScheduleService(engine)
+    availability = AvailabilityService(engine)
+
+    manual = service.create_manual_booking(
+        master_telegram_user_id=1000001,
+        command=MasterManualBookingCommand(
+            client_name="Offline Client",
+            service_type="haircut",
+            slot_start=datetime(2026, 2, 16, 12, 0, tzinfo=UTC),
+        ),
+    )
+    assert manual.applied is True
+    assert manual.booking_id is not None
+
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT client_user_id, status FROM bookings WHERE id = :id"),
+            {"id": manual.booking_id},
+        ).mappings().one()
+    assert row["client_user_id"] is not None
+    assert row["status"] == "active"
+
+    slots = availability.list_slots(
+        master_id=1,
+        on_date=date(2026, 2, 16),
+        now=datetime(2026, 2, 16, 9, 0, tzinfo=UTC),
+    )
+    starts = {slot.start_at.strftime("%H:%M") for slot in slots}
+    assert "12:00" not in starts
+
+
+def test_master_manual_booking_rejects_overlap_and_unavailable_slots() -> None:
+    engine = _setup_telegram_flow_schema()
+    service = MasterScheduleService(engine)
+
+    first = service.create_manual_booking(
+        master_telegram_user_id=1000001,
+        command=MasterManualBookingCommand(
+            client_name="Offline Client",
+            service_type="haircut",
+            slot_start=datetime(2026, 2, 16, 12, 0, tzinfo=UTC),
+        ),
+    )
+    assert first.applied is True
+
+    overlap = service.create_manual_booking(
+        master_telegram_user_id=1000001,
+        command=MasterManualBookingCommand(
+            client_name="Offline Client 2",
+            service_type="beard",
+            slot_start=datetime(2026, 2, 16, 12, 30, tzinfo=UTC),
+        ),
+    )
+    assert overlap.applied is False
+    assert "недоступен" in overlap.message.lower()
+
+    day_off = service.upsert_day_off(
+        master_telegram_user_id=1000001,
+        command=MasterDayOffCommand(
+            start_at=datetime(2026, 2, 16, 17, 0, tzinfo=UTC),
+            end_at=datetime(2026, 2, 16, 18, 0, tzinfo=UTC),
+        ),
+    )
+    assert day_off.applied is True
+
+    blocked = service.create_manual_booking(
+        master_telegram_user_id=1000001,
+        command=MasterManualBookingCommand(
+            client_name="Blocked Client",
+            service_type="haircut",
+            slot_start=datetime(2026, 2, 16, 17, 0, tzinfo=UTC),
+        ),
+    )
+    assert blocked.applied is False
+
+    lunch = service.update_lunch_break(
+        master_telegram_user_id=1000001,
+        command=MasterLunchBreakCommand(
+            lunch_start=datetime.strptime("18:00", "%H:%M").time(),
+            lunch_end=datetime.strptime("19:00", "%H:%M").time(),
+        ),
+    )
+    assert lunch.applied is True
+
+    lunch_conflict = service.create_manual_booking(
+        master_telegram_user_id=1000001,
+        command=MasterManualBookingCommand(
+            client_name="Lunch Client",
+            service_type="haircut",
+            slot_start=datetime(2026, 2, 16, 18, 0, tzinfo=UTC),
+        ),
+    )
+    assert lunch_conflict.applied is False
+
+
 def test_telegram_booking_flow_start_and_select_steps() -> None:
     engine = _setup_telegram_flow_schema()
     flow = TelegramBookingFlowService(engine)

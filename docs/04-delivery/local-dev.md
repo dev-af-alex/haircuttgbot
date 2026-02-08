@@ -49,7 +49,7 @@ A developer can run:
    `docker compose exec -T postgres psql -U haircuttgbot -d haircuttgbot -c "SELECT count(*) FROM masters;"`
 5. Confirm startup structured log exists:
    `docker compose logs bot-api --tail=50 | grep '"event": "startup"'`
-6. Validate booking flow success + one-active-future-booking rejection + cancellation paths:
+6. Validate booking/cancellation flow + master schedule updates (day-off/lunch/manual booking):
    `docker compose exec -T bot-api python - <<'PY'
 import json
 import urllib.request
@@ -74,6 +74,36 @@ with engine.begin() as conn:
             "DELETE FROM bookings WHERE client_user_id = (SELECT id FROM users WHERE telegram_user_id = :telegram_user_id)"
         ),
         {"telegram_user_id": client_tg},
+    )
+    conn.execute(
+        text(
+            """
+            DELETE FROM bookings
+            WHERE master_id = 1
+              AND slot_start >= '2026-02-16T00:00:00+00:00'
+              AND slot_start < '2026-02-17T00:00:00+00:00'
+            """
+        )
+    )
+    conn.execute(
+        text(
+            """
+            DELETE FROM availability_blocks
+            WHERE master_id = 1
+              AND start_at >= '2026-02-16T00:00:00+00:00'
+              AND start_at < '2026-02-17T00:00:00+00:00'
+            """
+        )
+    )
+    conn.execute(
+        text(
+            """
+            UPDATE masters
+            SET lunch_start = '13:00:00',
+                lunch_end = '14:00:00'
+            WHERE id = 1
+            """
+        )
     )
 
 payload = {
@@ -134,6 +164,65 @@ master_cancel_result = json.loads(urllib.request.urlopen(master_cancel_without_r
 assert master_cancel_result["cancelled"] is False
 assert "причину" in master_cancel_result["message"].lower()
 
+# EPIC-006 checks: day-off / lunch update / manual booking
+day_off_req = urllib.request.Request(
+    "http://127.0.0.1:8080/internal/telegram/master/schedule/day-off",
+    data=json.dumps(
+        {
+            "master_telegram_user_id": 1000001,
+            "start_at": "2026-02-16T15:00:00+00:00",
+            "end_at": "2026-02-16T16:00:00+00:00",
+        }
+    ).encode("utf-8"),
+    headers={"Content-Type": "application/json"},
+)
+day_off_result = json.loads(urllib.request.urlopen(day_off_req).read().decode())
+assert day_off_result["applied"] is True
+
+lunch_req = urllib.request.Request(
+    "http://127.0.0.1:8080/internal/telegram/master/schedule/lunch",
+    data=json.dumps(
+        {
+            "master_telegram_user_id": 1000001,
+            "lunch_start": "18:00:00",
+            "lunch_end": "19:00:00",
+        }
+    ).encode("utf-8"),
+    headers={"Content-Type": "application/json"},
+)
+lunch_result = json.loads(urllib.request.urlopen(lunch_req).read().decode())
+assert lunch_result["applied"] is True
+
+manual_req = urllib.request.Request(
+    "http://127.0.0.1:8080/internal/telegram/master/schedule/manual-booking",
+    data=json.dumps(
+        {
+            "master_telegram_user_id": 1000001,
+            "client_name": "Offline Smoke Client",
+            "service_type": "haircut",
+            "slot_start": "2026-02-16T12:00:00+00:00",
+        }
+    ).encode("utf-8"),
+    headers={"Content-Type": "application/json"},
+)
+manual_result = json.loads(urllib.request.urlopen(manual_req).read().decode())
+assert manual_result["applied"] is True
+
+manual_overlap_req = urllib.request.Request(
+    "http://127.0.0.1:8080/internal/telegram/master/schedule/manual-booking",
+    data=json.dumps(
+        {
+            "master_telegram_user_id": 1000001,
+            "client_name": "Offline Smoke Client 2",
+            "service_type": "beard",
+            "slot_start": "2026-02-16T12:30:00+00:00",
+        }
+    ).encode("utf-8"),
+    headers={"Content-Type": "application/json"},
+)
+manual_overlap_result = json.loads(urllib.request.urlopen(manual_overlap_req).read().decode())
+assert manual_overlap_result["applied"] is False
+
 print(
     {
         "first": first,
@@ -141,6 +230,10 @@ print(
         "cancelled": cancelled,
         "third": third,
         "master_cancel_result": master_cancel_result,
+        "day_off_result": day_off_result,
+        "lunch_result": lunch_result,
+        "manual_result": manual_result,
+        "manual_overlap_result": manual_overlap_result,
     }
 )
 PY`

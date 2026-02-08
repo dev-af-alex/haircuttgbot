@@ -23,4 +23,10 @@ RU_BOOKING_MESSAGES = {
     "day_off_invalid_interval": "Некорректный интервал выходного.",
     "day_off_not_found": "Выходной интервал не найден.",
     "day_off_reason_default": "master_day_off",
+    "lunch_updated": "Обеденный перерыв обновлен.",
+    "lunch_invalid_interval": "Некорректный интервал обеда.",
+    "lunch_invalid_duration": "Длительность обеда должна быть 60 минут.",
+    "lunch_outside_work_hours": "Обеденный перерыв должен быть в пределах рабочего окна.",
+    "manual_booking_created": "Ручная запись создана.",
+    "manual_booking_conflict": "Слот для ручной записи недоступен.",
 }
