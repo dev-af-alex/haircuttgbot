@@ -40,7 +40,7 @@ Rules:
     - Local-run impact: local bot interaction now requires role-aware flows and test accounts.
     - Delivered: DB-backed role mapping, RBAC authorization endpoint, ru auth messages, and automated RBAC tests.
 
-- EPIC-004 — Client booking flow — Status: IN_PROGRESS
+- EPIC-004 — Client booking flow — Status: DONE
     - Goal: deliver client journey for viewing availability and creating bookings with service selection.
     - Acceptance:
         - Client can select master and service option (haircut, beard, haircut+beard).
@@ -48,8 +48,9 @@ Rules:
         - Client is limited to one active future booking and receives confirmation notification.
     - Dependencies: EPIC-002, EPIC-003.
     - Local-run impact: smoke test extends from health checks to end-to-end booking creation via bot.
+    - Delivered: service option catalog, availability/read + booking/create flow, Telegram client booking-flow contracts, confirmation notifications, and extended local smoke for success/reject scenarios.
 
-- EPIC-005 — Cancellation and notification flow — Status: TODO
+- EPIC-005 — Cancellation and notification flow — Status: IN_PROGRESS
     - Goal: implement cancel scenarios for both roles, including mandatory reason from master.
     - Acceptance:
         - Client can cancel own active booking.
