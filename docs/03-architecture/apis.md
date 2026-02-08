@@ -59,3 +59,27 @@
     - Validates service option code against canonical contract.
     - Rejects overlap with active booking/day-off/manual blocks/lunch and out-of-work-window slots.
     - Enforces at most one active future booking per client.
+
+- `GET /internal/telegram/client/booking-flow/start`
+  - Purpose: start client booking flow (master selection step).
+  - Response `200`:
+    `{"message":"Выберите мастера.","masters":[{"id":1,"display_name":"Master Demo 1","telegram_user_id":1000001}]}`
+
+- `POST /internal/telegram/client/booking-flow/select-master`
+  - Purpose: move flow to service selection after master choice.
+  - Request: `{"master_id":1}`
+  - Response `200`:
+    `{"message":"Выберите услугу.","service_options":[{"code":"haircut","label":"Стрижка"}]}`
+
+- `POST /internal/telegram/client/booking-flow/select-service`
+  - Purpose: move flow to slot selection after service/date choice.
+  - Request: `{"master_id":1,"date":"2026-02-12"}`
+  - Response `200`:
+    `{"message":"Выберите доступный слот.","slots":[{"start_at":"2026-02-12T10:00:00+00:00","end_at":"2026-02-12T11:00:00+00:00"}]}`
+
+- `POST /internal/telegram/client/booking-flow/confirm`
+  - Purpose: confirm flow and create booking with notifications.
+  - Request:
+    `{"client_telegram_user_id":2000001,"master_id":1,"service_type":"haircut","slot_start":"2026-02-12T10:00:00+00:00"}`
+  - Response `200` (success):
+    `{"created":true,"booking_id":42,"message":"Запись успешно создана.","notifications":[{"recipient_telegram_user_id":2000001,"message":"Запись подтверждена."},{"recipient_telegram_user_id":1000001,"message":"Новая запись клиента добавлена в расписание."}]}`

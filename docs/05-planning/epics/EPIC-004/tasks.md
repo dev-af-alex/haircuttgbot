@@ -43,7 +43,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 1 dev-day
   - Dependencies: T-004
 
-- T-006 — Wire Telegram booking flow and confirmations — Status: TODO
+- T-006 — Wire Telegram booking flow and confirmations — Status: DONE
   - Scope: connect handlers/menu callbacks for select master → select service → pick slot → confirm booking.
   - Acceptance:
     - client completes booking flow through Telegram interactions.
@@ -51,7 +51,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 3 dev-days
   - Dependencies: T-004, T-005
 
-- T-007 — Extend smoke test + finalize doc sync for EPIC-004 — Status: TODO
+- T-007 — Extend smoke test + finalize doc sync for EPIC-004 — Status: DONE
   - Scope: update local smoke and architecture/product docs for booking flow behavior.
   - Acceptance:
     - local smoke includes one successful booking scenario and one rejection scenario.

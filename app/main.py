@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+from contextlib import asynccontextmanager
 from datetime import date, datetime
 
 from aiogram import Dispatcher
@@ -8,13 +9,34 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 from app.auth import RoleRepository, authorize_command
-from app.booking import AvailabilityService, BookingService, list_service_options
+from app.booking import AvailabilityService, BookingService, TelegramBookingFlowService, list_service_options
 from app.db.session import get_engine
 
 LOGGER = logging.getLogger("bot_api")
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-app = FastAPI(title="haircuttgbot-api", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+
+    # Keep aiogram integration point present in runtime skeleton.
+    _dispatcher = Dispatcher()
+    _ = _dispatcher
+
+    LOGGER.info(
+        json.dumps(
+            {
+                "event": "startup",
+                "service": "bot-api",
+                "telegram_token_configured": bool(bot_token),
+            }
+        )
+    )
+    yield
+
+
+app = FastAPI(title="haircuttgbot-api", version="0.1.0", lifespan=lifespan)
 
 
 class ResolveRoleRequest(BaseModel):
@@ -38,23 +60,20 @@ class CreateBookingRequest(BaseModel):
     slot_start: datetime
 
 
-@app.on_event("startup")
-def on_startup() -> None:
-    bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+class TelegramFlowMasterRequest(BaseModel):
+    master_id: int
 
-    # Keep aiogram integration point present in runtime skeleton.
-    _dispatcher = Dispatcher()
-    _ = _dispatcher
 
-    LOGGER.info(
-        json.dumps(
-            {
-                "event": "startup",
-                "service": "bot-api",
-                "telegram_token_configured": bool(bot_token),
-            }
-        )
-    )
+class TelegramFlowServiceRequest(BaseModel):
+    master_id: int
+    date: date
+
+
+class TelegramFlowConfirmRequest(BaseModel):
+    client_telegram_user_id: int
+    master_id: int
+    service_type: str
+    slot_start: datetime
 
 
 @app.get("/health")
@@ -127,3 +146,32 @@ def create_booking(payload: CreateBookingRequest) -> dict[str, int | str | bool 
         "booking_id": result.booking_id,
         "message": result.message,
     }
+
+
+@app.get("/internal/telegram/client/booking-flow/start")
+def telegram_booking_flow_start() -> dict[str, object]:
+    flow = TelegramBookingFlowService(get_engine())
+    return flow.start()
+
+
+@app.post("/internal/telegram/client/booking-flow/select-master")
+def telegram_booking_flow_select_master(payload: TelegramFlowMasterRequest) -> dict[str, object]:
+    flow = TelegramBookingFlowService(get_engine())
+    return flow.select_master(payload.master_id)
+
+
+@app.post("/internal/telegram/client/booking-flow/select-service")
+def telegram_booking_flow_select_service(payload: TelegramFlowServiceRequest) -> dict[str, object]:
+    flow = TelegramBookingFlowService(get_engine())
+    return flow.select_service(master_id=payload.master_id, on_date=payload.date)
+
+
+@app.post("/internal/telegram/client/booking-flow/confirm")
+def telegram_booking_flow_confirm(payload: TelegramFlowConfirmRequest) -> dict[str, object]:
+    flow = TelegramBookingFlowService(get_engine())
+    return flow.confirm(
+        client_telegram_user_id=payload.client_telegram_user_id,
+        master_id=payload.master_id,
+        service_type=payload.service_type,
+        slot_start=payload.slot_start,
+    )

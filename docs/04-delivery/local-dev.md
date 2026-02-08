@@ -49,6 +49,56 @@ A developer can run:
    `docker compose exec -T postgres psql -U haircuttgbot -d haircuttgbot -c "SELECT count(*) FROM masters;"`
 5. Confirm startup structured log exists:
    `docker compose logs bot-api --tail=50 | grep '"event": "startup"'`
+6. Validate booking flow success + one-active-future-booking rejection:
+   `docker compose exec -T bot-api python - <<'PY'
+import json
+import urllib.request
+from sqlalchemy import create_engine, text
+from app.db.session import get_database_url
+
+client_tg = 2001001
+slot_1 = "2026-02-13T10:00:00+00:00"
+slot_2 = "2026-02-13T12:00:00+00:00"
+
+engine = create_engine(get_database_url(), future=True)
+with engine.begin() as conn:
+    conn.execute(text("INSERT INTO roles (name) VALUES ('Client') ON CONFLICT (name) DO NOTHING"))
+    conn.execute(
+        text(
+            "INSERT INTO users (telegram_user_id, role_id) VALUES (:telegram_user_id, (SELECT id FROM roles WHERE name='Client')) ON CONFLICT (telegram_user_id) DO NOTHING"
+        ),
+        {"telegram_user_id": client_tg},
+    )
+    conn.execute(
+        text(
+            "DELETE FROM bookings WHERE client_user_id = (SELECT id FROM users WHERE telegram_user_id = :telegram_user_id)"
+        ),
+        {"telegram_user_id": client_tg},
+    )
+
+payload = {
+    "client_telegram_user_id": client_tg,
+    "master_id": 1,
+    "service_type": "haircut",
+    "slot_start": slot_1,
+}
+req = urllib.request.Request(
+    "http://127.0.0.1:8080/internal/telegram/client/booking-flow/confirm",
+    data=json.dumps(payload).encode("utf-8"),
+    headers={"Content-Type": "application/json"},
+)
+first = json.loads(urllib.request.urlopen(req).read().decode())
+payload["slot_start"] = slot_2
+second_req = urllib.request.Request(
+    "http://127.0.0.1:8080/internal/telegram/client/booking-flow/confirm",
+    data=json.dumps(payload).encode("utf-8"),
+    headers={"Content-Type": "application/json"},
+)
+second = json.loads(urllib.request.urlopen(second_req).read().decode())
+assert first["created"] is True
+assert second["created"] is False
+print({"first": first, "second": second})
+PY`
 
 ## Notes
 

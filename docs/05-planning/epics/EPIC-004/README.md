@@ -1,6 +1,6 @@
 # EPIC-004 — Client booking flow
 
-Status: IN_PROGRESS
+Status: DONE
 
 ## Goal
 
@@ -44,3 +44,18 @@ Deliver the client journey for selecting a master/service, viewing available slo
 - Group 01: service catalog + availability query baseline.
 - Group 02: booking creation + one-active-booking enforcement.
 - Group 03: flow polish, tests expansion, smoke/doc-sync, acceptance verification.
+
+## Delivered
+
+- Canonical booking service options and RU labels for client flow.
+- Availability slot generation with lunch/block/occupied exclusion and current-day past-slot filtering.
+- Booking creation validation with one-active-future-booking guard.
+- Telegram booking-flow contracts (start/select/confirm) and confirmation notifications for client + master.
+- Updated local smoke test covering one successful booking and one rejection scenario.
+
+## Closure verification (2026-02-08)
+
+- All tasks in `tasks.md` are `DONE`.
+- All PR groups (`group-01`, `group-02`, `group-03`) are `DONE`.
+- PR and doc-sync merge gates are satisfied.
+- Intentional deviations: none.
