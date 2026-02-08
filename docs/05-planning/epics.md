@@ -60,7 +60,7 @@ Rules:
     - Local-run impact: local smoke covers both client and master cancellation paths.
     - Delivered: client self-cancellation flow, master cancellation with mandatory reason and ownership checks, reasoned cancellation notifications, and updated local smoke coverage for cancel success/reject paths.
 
-- EPIC-006 — Master schedule management — Status: TODO
+- EPIC-006 — Master schedule management — Status: IN_PROGRESS
     - Goal: allow masters to manage schedule directly in Telegram (manual bookings, day off, lunch break updates).
     - Acceptance:
         - Master can create manual booking for off-bot requests.
