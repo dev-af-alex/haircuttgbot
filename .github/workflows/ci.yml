@@ -10,6 +10,21 @@ jobs:
   test-and-security:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: haircuttgbot
+          POSTGRES_USER: haircuttgbot
+          POSTGRES_PASSWORD: haircuttgbot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U haircuttgbot -d haircuttgbot"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,6 +39,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest bandit pip-audit
+
+      - name: Apply migrations (Schema regression check)
+        env:
+          DATABASE_URL: postgresql+psycopg2://haircuttgbot:haircuttgbot@localhost:5432/haircuttgbot
+        run: |
+          for i in $(seq 1 30); do
+            (echo > /dev/tcp/127.0.0.1/5432) >/dev/null 2>&1 && break
+            sleep 2
+          done
+          alembic upgrade head
 
       - name: Run tests
         run: pytest -q

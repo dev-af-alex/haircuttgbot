@@ -17,10 +17,14 @@ A developer can run:
 ## Local run steps (must be kept current)
 
 1. `docker compose up -d --build`
-2. Wait until all services are healthy:
+2. Verify migration completed successfully:
+   `docker compose ps -a`
+3. Seed baseline data (2 masters):
+   `docker compose exec -T bot-api python -m app.db.seed`
+4. Wait until `bot-api`, `postgres`, and `redis` are healthy:
    `docker compose ps`
-3. Run smoke test (below)
-4. `docker compose down` to stop
+5. Run smoke test (below)
+6. `docker compose down` to stop
 
 ## Ports
 
@@ -30,20 +34,23 @@ A developer can run:
 
 - `postgres`: `pg_isready`
 - `redis`: `redis-cli ping`
+- `migrate`: one-shot Alembic migration service (`alembic upgrade head`)
 - `bot-api`: internal HTTP check against `http://127.0.0.1:8080/health`
 
 ## Smoke test (must pass on every PR)
 
-1. Verify containers are up and healthy:
-   `docker compose ps`
-2. Check API health endpoint:
+1. Verify migration service completed:
+   `docker compose ps -a`
+2. Seed baseline records:
+   `docker compose exec -T bot-api python -m app.db.seed`
+3. Check API health endpoint:
    `curl -fsS http://localhost:8080/health`
-3. Expected response contains:
-   `{"status":"ok","service":"bot-api"}`
-4. Confirm startup structured log exists:
+4. Validate seed result (at least 2 masters):
+   `docker compose exec -T postgres psql -U haircuttgbot -d haircuttgbot -c "SELECT count(*) FROM masters;"`
+5. Confirm startup structured log exists:
    `docker compose logs bot-api --tail=50 | grep '"event": "startup"'`
 
 ## Notes
 
-- Current baseline includes runtime skeleton only; booking business flows are added in next epics.
+- Runtime skeleton includes automatic migration execution via `migrate` service.
 - Do not commit secrets or real bot tokens.

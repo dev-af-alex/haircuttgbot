@@ -20,7 +20,7 @@ Rules:
     - Local-run impact: introduces first real local runtime; all next epics build on this compose baseline.
     - Delivered: real compose runtime (`bot-api` + `postgres` + `redis`), health smoke test, and CI baseline with Bandit + pip-audit + Gitleaks.
 
-- EPIC-002 — Data model + migration baseline — Status: TODO
+- EPIC-002 — Data model + migration baseline — Status: DONE
     - Goal: implement relational schema and migrations for roles, masters, clients, bookings, availability blocks, and audit events.
     - Acceptance:
         - Initial DB schema created via migration tooling and applied automatically in local setup.
@@ -28,6 +28,7 @@ Rules:
         - Seed data for at least two masters available for local smoke scenarios.
     - Dependencies: EPIC-001.
     - Local-run impact: local `docker compose up -d` provisions a usable database state for bot scenarios.
+    - Delivered: Alembic migration baseline, core relational schema + constraints, automatic compose migration job, and seed flow with 2 masters.
 
 - EPIC-003 — Telegram auth + role enforcement — Status: TODO
     - Goal: wire Telegram bot identity and enforce command-level RBAC for `Client` and `Master`.

@@ -25,6 +25,20 @@ services:
     networks:
       - app-net
 
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-haircuttgbot}:${POSTGRES_PASSWORD:-haircuttgbot}@postgres:5432/${POSTGRES_DB:-haircuttgbot}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - app-net
+
   bot-api:
     build:
       context: .
@@ -38,11 +52,14 @@ services:
       POSTGRES_PORT: "5432"
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-haircuttgbot}:${POSTGRES_PASSWORD:-haircuttgbot}@postgres:5432/${POSTGRES_DB:-haircuttgbot}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     ports:
       - "8080:8080"
     healthcheck:
