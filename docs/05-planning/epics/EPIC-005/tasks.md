@@ -43,7 +43,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 2 dev-days
   - Dependencies: T-003, T-004
 
-- T-006 — Expand smoke and finalize doc sync for EPIC-005 — Status: TODO
+- T-006 — Expand smoke and finalize doc sync for EPIC-005 — Status: DONE
   - Scope: extend local smoke steps and synchronize planning/product/delivery docs for cancellation behavior.
   - Acceptance:
     - smoke test covers at least one successful client cancellation and one rejected master-without-reason cancellation.

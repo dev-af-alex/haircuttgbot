@@ -49,7 +49,7 @@ A developer can run:
    `docker compose exec -T postgres psql -U haircuttgbot -d haircuttgbot -c "SELECT count(*) FROM masters;"`
 5. Confirm startup structured log exists:
    `docker compose logs bot-api --tail=50 | grep '"event": "startup"'`
-6. Validate booking flow success + one-active-future-booking rejection:
+6. Validate booking flow success + one-active-future-booking rejection + cancellation paths:
    `docker compose exec -T bot-api python - <<'PY'
 import json
 import urllib.request
@@ -97,7 +97,52 @@ second_req = urllib.request.Request(
 second = json.loads(urllib.request.urlopen(second_req).read().decode())
 assert first["created"] is True
 assert second["created"] is False
-print({"first": first, "second": second})
+
+cancel_req = urllib.request.Request(
+    "http://127.0.0.1:8080/internal/telegram/client/booking-flow/cancel",
+    data=json.dumps(
+        {
+            "client_telegram_user_id": client_tg,
+            "booking_id": first["booking_id"],
+        }
+    ).encode("utf-8"),
+    headers={"Content-Type": "application/json"},
+)
+cancelled = json.loads(urllib.request.urlopen(cancel_req).read().decode())
+assert cancelled["cancelled"] is True
+
+third_req = urllib.request.Request(
+    "http://127.0.0.1:8080/internal/telegram/client/booking-flow/confirm",
+    data=json.dumps(payload).encode("utf-8"),
+    headers={"Content-Type": "application/json"},
+)
+third = json.loads(urllib.request.urlopen(third_req).read().decode())
+assert third["created"] is True
+
+master_cancel_without_reason = urllib.request.Request(
+    "http://127.0.0.1:8080/internal/telegram/master/booking-flow/cancel",
+    data=json.dumps(
+        {
+            "master_telegram_user_id": 1000001,
+            "booking_id": third["booking_id"],
+            "reason": " ",
+        }
+    ).encode("utf-8"),
+    headers={"Content-Type": "application/json"},
+)
+master_cancel_result = json.loads(urllib.request.urlopen(master_cancel_without_reason).read().decode())
+assert master_cancel_result["cancelled"] is False
+assert "причину" in master_cancel_result["message"].lower()
+
+print(
+    {
+        "first": first,
+        "second": second,
+        "cancelled": cancelled,
+        "third": third,
+        "master_cancel_result": master_cancel_result,
+    }
+)
 PY`
 
 ## Notes
