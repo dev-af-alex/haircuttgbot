@@ -1,6 +1,6 @@
 # EPIC-006 — Master schedule management
 
-Status: IN_PROGRESS
+Status: DONE
 
 ## Goal
 
@@ -44,3 +44,17 @@ Allow masters to manage schedule directly in Telegram: add manual bookings, set 
 - Group 01: day-off management baseline + availability recalculation.
 - Group 02: lunch break update flow + conflict validation.
 - Group 03: manual booking flow + smoke/doc sync + acceptance hardening.
+
+## Delivered
+
+- Master day-off write path with ownership checks and immediate availability recalculation.
+- Lunch break update flow with interval/duration/work-window validation and enforcement in availability/booking checks.
+- Manual booking flow for offline requests with overlap/blocked-slot guardrails.
+- Updated local smoke runbook covering day-off, lunch update, and manual-booking success/reject scenarios.
+
+## Closure verification (2026-02-08)
+
+- All tasks in `tasks.md` are `DONE`.
+- All PR groups (`group-01`, `group-02`, `group-03`) are `DONE`.
+- Local merge gates validated: `docker compose up -d --build`, updated smoke in `docs/04-delivery/local-dev.md`, and `.venv/bin/pytest -q`.
+- Intentional deviations: CI status and security scans (Bandit, pip-audit, Gitleaks) are not executed locally and are expected on PR pipeline.

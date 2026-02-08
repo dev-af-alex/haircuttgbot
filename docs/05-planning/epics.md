@@ -60,7 +60,7 @@ Rules:
     - Local-run impact: local smoke covers both client and master cancellation paths.
     - Delivered: client self-cancellation flow, master cancellation with mandatory reason and ownership checks, reasoned cancellation notifications, and updated local smoke coverage for cancel success/reject paths.
 
-- EPIC-006 — Master schedule management — Status: IN_PROGRESS
+- EPIC-006 — Master schedule management — Status: DONE
     - Goal: allow masters to manage schedule directly in Telegram (manual bookings, day off, lunch break updates).
     - Acceptance:
         - Master can create manual booking for off-bot requests.
@@ -68,6 +68,7 @@ Rules:
         - Default lunch break 13:00-14:00 is enforced and can be changed by master.
     - Dependencies: EPIC-004.
     - Local-run impact: local behavior includes dynamic availability recalculation after master schedule edits.
+    - Delivered: master day-off management, lunch-break update flow, manual booking flow with ownership/conflict checks, and updated local smoke coverage for schedule-change scenarios.
 
 - EPIC-007 — Observability + reliability baseline — Status: TODO
     - Goal: add production-ready logging, metrics, backup/restore runbook, and basic alerts for single VM operations.
