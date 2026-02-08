@@ -1,3 +1,8 @@
+---
+name: 01_bootstrap_project
+description: Bootstrap project knowledge base from initial requirements and select a concrete tech stack.
+---
+
 # Skill 01 — Bootstrap knowledge base (FR intake → questions → initial docs → choose stack)
 
 ## Developer prompt (paste after calling the skill)

@@ -1,3 +1,8 @@
+---
+name: 05_implement_next_pr_group
+description: Implement the next PR group with tests and synchronized documentation updates.
+---
+
 # Skill 05 — Implement next PR group (code + tests + doc sync)
 
 ## Developer prompt

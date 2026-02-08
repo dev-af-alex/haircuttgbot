@@ -1,3 +1,8 @@
+---
+name: 02_lock_inputs
+description: Transfer clarified answers into SSOT documents and close answered open questions.
+---
+
 # Skill 02 — Lock inputs (answers → SSOT update → remove questions)
 
 ## Developer prompt

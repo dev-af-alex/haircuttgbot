@@ -10,19 +10,74 @@ Rules:
 
 ## Epics
 
-- EPIC-001 — Project bootstrap (compose + CI gates + skeleton) — Status: TODO
-    - Goal: replace placeholder compose with real project compose; have a runnable skeleton.
+- EPIC-001 — Runtime skeleton + CI security gates — Status: IN_PROGRESS
+    - Goal: replace placeholder setup with runnable bot-api/postgres/redis skeleton and mandatory CI security checks.
     - Acceptance:
-        - `docker compose up -d` runs the real app
-        - smoke test passes
-        - CI has SAST + dep scan + secrets scan
-    - Depends on: tech stack selected (`docs/03-architecture/tech-stack.md`)
+        - `docker compose up -d` starts `bot-api`, `postgres`, and `redis` with health checks.
+        - Smoke test in `docs/04-delivery/local-dev.md` is executable and passing.
+        - CI runs Bandit, pip-audit, and Gitleaks on pull requests and fails on configured severity threshold.
+    - Dependencies: tech stack selected in `docs/03-architecture/tech-stack.md`.
+    - Local-run impact: introduces first real local runtime; all next epics build on this compose baseline.
 
-- EPIC-002 — VM deployment baseline — Status: TODO
-    - Goal: deploy working project to a single VM.
+- EPIC-002 — Data model + migration baseline — Status: TODO
+    - Goal: implement relational schema and migrations for roles, masters, clients, bookings, availability blocks, and audit events.
     - Acceptance:
-        - documented steps in `docs/04-delivery/deploy-vm.md`
-        - deploy uses docker-compose on VM
-        - rollback steps documented
+        - Initial DB schema created via migration tooling and applied automatically in local setup.
+        - Uniqueness and conflict constraints prevent double-booking for the same master/time slot.
+        - Seed data for at least two masters available for local smoke scenarios.
+    - Dependencies: EPIC-001.
+    - Local-run impact: local `docker compose up -d` provisions a usable database state for bot scenarios.
 
-(Add product epics derived from `docs/01-product/requirements.md` below.)
+- EPIC-003 — Telegram auth + role enforcement — Status: TODO
+    - Goal: wire Telegram bot identity and enforce command-level RBAC for `Client` and `Master`.
+    - Acceptance:
+        - Telegram user ID mapping to role is persisted and validated on every protected command.
+        - Unauthorized command attempts are rejected and logged.
+        - Russian-language command/menu baseline is available for both roles.
+    - Dependencies: EPIC-001, EPIC-002.
+    - Local-run impact: local bot interaction now requires role-aware flows and test accounts.
+
+- EPIC-004 — Client booking flow — Status: TODO
+    - Goal: deliver client journey for viewing availability and creating bookings with service selection.
+    - Acceptance:
+        - Client can select master and service option (haircut, beard, haircut+beard).
+        - Availability excludes occupied slots, day off, and lunch break; default slot duration is 60 minutes.
+        - Client is limited to one active future booking and receives confirmation notification.
+    - Dependencies: EPIC-002, EPIC-003.
+    - Local-run impact: smoke test extends from health checks to end-to-end booking creation via bot.
+
+- EPIC-005 — Cancellation and notification flow — Status: TODO
+    - Goal: implement cancel scenarios for both roles, including mandatory reason from master.
+    - Acceptance:
+        - Client can cancel own active booking.
+        - Master can cancel client booking only with required textual reason.
+        - Cancellation notifications are delivered to affected participants with correct context.
+    - Dependencies: EPIC-004.
+    - Local-run impact: local smoke covers both client and master cancellation paths.
+
+- EPIC-006 — Master schedule management — Status: TODO
+    - Goal: allow masters to manage schedule directly in Telegram (manual bookings, day off, lunch break updates).
+    - Acceptance:
+        - Master can create manual booking for off-bot requests.
+        - Master can set day-off periods blocking client booking.
+        - Default lunch break 13:00-14:00 is enforced and can be changed by master.
+    - Dependencies: EPIC-004.
+    - Local-run impact: local behavior includes dynamic availability recalculation after master schedule edits.
+
+- EPIC-007 — Observability + reliability baseline — Status: TODO
+    - Goal: add production-ready logging, metrics, backup/restore runbook, and basic alerts for single VM operations.
+    - Acceptance:
+        - Structured logs include key security and booking lifecycle events without secret leakage.
+        - Metrics endpoint exposes health, latency, and booking success/failure counters.
+        - Backup and restore procedure for PostgreSQL documented and validated in local/staging rehearsal.
+    - Dependencies: EPIC-001, EPIC-002, EPIC-004, EPIC-006.
+    - Local-run impact: compose and docs include observability endpoints plus backup/restore rehearsal commands.
+
+- EPIC-008 — Single-VM deployment baseline — Status: TODO
+    - Goal: package and deploy the working bot stack onto one VM with documented rollback.
+    - Acceptance:
+        - `docs/04-delivery/deploy-vm.md` contains complete, reproducible VM deployment and rollback instructions.
+        - Production-like compose bundle starts successfully on VM with secrets/config separation.
+        - Post-deploy smoke test validates core booking and schedule operations.
+    - Dependencies: EPIC-001, EPIC-004, EPIC-006, EPIC-007.
+    - Local-run impact: local environment mirrors VM runtime layout to reduce deployment drift.

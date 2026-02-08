@@ -1,6 +1,6 @@
 # Local development via docker-compose (SSOT)
 
-## Definition: “system runs locally”
+## Definition: "system runs locally"
 
 A developer can run:
 
@@ -12,24 +12,38 @@ A developer can run:
 
 - Docker Engine
 - Docker Compose v2 (`docker compose`)
-- Make sure required ports are free (document them below)
+- Optional: copy `.env.example` to `.env` and set `TELEGRAM_BOT_TOKEN` for real Telegram integration tests
 
 ## Local run steps (must be kept current)
 
-1) `docker compose up -d`
-2) Wait for healthy services (document health checks)
-3) Run smoke test (below)
-4) `docker compose down` to stop
+1. `docker compose up -d --build`
+2. Wait until all services are healthy:
+   `docker compose ps`
+3. Run smoke test (below)
+4. `docker compose down` to stop
 
 ## Ports
 
-- 8080: placeholder (replace with real app ports)
+- `8080`: `bot-api` HTTP endpoint (`/health`)
+
+## Services and health checks
+
+- `postgres`: `pg_isready`
+- `redis`: `redis-cli ping`
+- `bot-api`: internal HTTP check against `http://127.0.0.1:8080/health`
 
 ## Smoke test (must pass on every PR)
 
-- TODO: describe a minimal end-to-end check (curl/http call / UI step)
+1. Verify containers are up and healthy:
+   `docker compose ps`
+2. Check API health endpoint:
+   `curl -fsS http://localhost:8080/health`
+3. Expected response contains:
+   `{"status":"ok","service":"bot-api"}`
+4. Confirm startup structured log exists:
+   `docker compose logs bot-api --tail=50 | grep '"event": "startup"'`
 
 ## Notes
 
-This repo ships with a placeholder `docker-compose.yml` to validate the workflow.
-Replace it with the project’s real compose setup in the first implementation epic.
+- Current baseline includes runtime skeleton only; booking business flows are added in next epics.
+- Do not commit secrets or real bot tokens.

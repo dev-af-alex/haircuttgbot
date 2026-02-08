@@ -1,3 +1,8 @@
+---
+name: 04_start_next_epic
+description: Select the next epic, create its workspace, and decompose it into mergeable PR groups.
+---
+
 # Skill 04 — Start next epic (select epic → workspace + tasks + PR groups)
 
 ## Developer prompt

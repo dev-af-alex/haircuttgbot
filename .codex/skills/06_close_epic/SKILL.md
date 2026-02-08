@@ -1,3 +1,8 @@
+---
+name: 06_close_epic
+description: Validate completion and close an epic with final status and documentation sync.
+---
+
 # Skill 06 — Close epic (status DONE + final doc sync)
 
 ## Developer prompt

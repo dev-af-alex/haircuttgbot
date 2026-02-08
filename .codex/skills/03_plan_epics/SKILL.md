@@ -1,3 +1,8 @@
+---
+name: 03_plan_epics
+description: Build an ordered epic roadmap from current SSOT and delivery constraints.
+---
+
 # Skill 03 — Plan epics (SSOT docs → roadmap)
 
 ## Developer prompt (optional)
