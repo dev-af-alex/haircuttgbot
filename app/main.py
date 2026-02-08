@@ -1,11 +1,10 @@
-import json
 import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time
 
 from aiogram import Dispatcher
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from pydantic import BaseModel
 
 from app.auth import RoleRepository, authorize_command
@@ -20,8 +19,13 @@ from app.booking import (
     list_service_options,
 )
 from app.db.session import get_engine
+from app.observability import (
+    emit_event,
+    instrument_endpoint,
+    render_metrics,
+    set_service_health,
+)
 
-LOGGER = logging.getLogger("bot_api")
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 
@@ -33,15 +37,8 @@ async def lifespan(_: FastAPI):
     _dispatcher = Dispatcher()
     _ = _dispatcher
 
-    LOGGER.info(
-        json.dumps(
-            {
-                "event": "startup",
-                "service": "bot-api",
-                "telegram_token_configured": bool(bot_token),
-            }
-        )
-    )
+    set_service_health(True)
+    emit_event("startup", telegram_token_configured=bool(bot_token))
     yield
 
 
@@ -117,11 +114,21 @@ class TelegramMasterManualBookingRequest(BaseModel):
 
 
 @app.get("/health")
+@instrument_endpoint("GET", "/health")
 def health() -> dict[str, str]:
+    set_service_health(True)
     return {"status": "ok", "service": "bot-api"}
 
 
+@app.get("/metrics")
+@instrument_endpoint("GET", "/metrics")
+def metrics() -> Response:
+    content, content_type = render_metrics()
+    return Response(content=content, media_type=content_type)
+
+
 @app.post("/internal/auth/resolve-role")
+@instrument_endpoint("POST", "/internal/auth/resolve-role")
 def resolve_role(payload: ResolveRoleRequest) -> dict[str, str | None]:
     repository = RoleRepository(get_engine())
     role = repository.resolve_role(payload.telegram_user_id)
@@ -129,22 +136,19 @@ def resolve_role(payload: ResolveRoleRequest) -> dict[str, str | None]:
 
 
 @app.post("/internal/commands/authorize")
+@instrument_endpoint("POST", "/internal/commands/authorize")
 def authorize(payload: AuthorizeCommandRequest) -> dict[str, str | bool | None]:
     repository = RoleRepository(get_engine())
     role = repository.resolve_role(payload.telegram_user_id)
     decision = authorize_command(payload.command, role)
 
     if not decision.allowed:
-        LOGGER.info(
-            json.dumps(
-                {
-                    "event": "rbac_deny",
-                    "telegram_user_id": payload.telegram_user_id,
-                    "command": payload.command,
-                    "resolved_role": role,
-                    "message": decision.message,
-                }
-            )
+        emit_event(
+            "rbac_deny",
+            telegram_user_id=payload.telegram_user_id,
+            command=payload.command,
+            resolved_role=role,
+            message=decision.message,
         )
 
     return {
@@ -155,11 +159,13 @@ def authorize(payload: AuthorizeCommandRequest) -> dict[str, str | bool | None]:
 
 
 @app.get("/internal/booking/service-options")
+@instrument_endpoint("GET", "/internal/booking/service-options")
 def service_options() -> dict[str, list[dict[str, str]]]:
     return {"service_options": list_service_options()}
 
 
 @app.post("/internal/availability/slots")
+@instrument_endpoint("POST", "/internal/availability/slots")
 def availability_slots(payload: AvailabilityRequest) -> dict[str, int | list[dict[str, str]]]:
     service = AvailabilityService(get_engine())
     slots = service.list_slots(master_id=payload.master_id, on_date=payload.date)
@@ -173,6 +179,12 @@ def availability_slots(payload: AvailabilityRequest) -> dict[str, int | list[dic
 
 
 @app.post("/internal/booking/create")
+@instrument_endpoint(
+    "POST",
+    "/internal/booking/create",
+    booking_action="booking_create",
+    outcome_key="created",
+)
 def create_booking(payload: CreateBookingRequest) -> dict[str, int | str | bool | None]:
     service = BookingService(get_engine())
     result = service.create_booking(
@@ -181,62 +193,124 @@ def create_booking(payload: CreateBookingRequest) -> dict[str, int | str | bool 
         service_type=payload.service_type,
         slot_start=payload.slot_start,
     )
-    return {
+    response = {
         "created": result.created,
         "booking_id": result.booking_id,
         "message": result.message,
     }
+    emit_event(
+        "booking_create",
+        master_id=payload.master_id,
+        client_user_id=payload.client_user_id,
+        service_type=payload.service_type,
+        slot_start=payload.slot_start.isoformat(),
+        created=result.created,
+        booking_id=result.booking_id,
+    )
+    return response
 
 
 @app.get("/internal/telegram/client/booking-flow/start")
+@instrument_endpoint("GET", "/internal/telegram/client/booking-flow/start")
 def telegram_booking_flow_start() -> dict[str, object]:
     flow = TelegramBookingFlowService(get_engine())
     return flow.start()
 
 
 @app.post("/internal/telegram/client/booking-flow/select-master")
+@instrument_endpoint("POST", "/internal/telegram/client/booking-flow/select-master")
 def telegram_booking_flow_select_master(payload: TelegramFlowMasterRequest) -> dict[str, object]:
     flow = TelegramBookingFlowService(get_engine())
     return flow.select_master(payload.master_id)
 
 
 @app.post("/internal/telegram/client/booking-flow/select-service")
+@instrument_endpoint("POST", "/internal/telegram/client/booking-flow/select-service")
 def telegram_booking_flow_select_service(payload: TelegramFlowServiceRequest) -> dict[str, object]:
     flow = TelegramBookingFlowService(get_engine())
     return flow.select_service(master_id=payload.master_id, on_date=payload.date)
 
 
 @app.post("/internal/telegram/client/booking-flow/confirm")
+@instrument_endpoint(
+    "POST",
+    "/internal/telegram/client/booking-flow/confirm",
+    booking_action="booking_flow_confirm",
+    outcome_key="created",
+)
 def telegram_booking_flow_confirm(payload: TelegramFlowConfirmRequest) -> dict[str, object]:
     flow = TelegramBookingFlowService(get_engine())
-    return flow.confirm(
+    response = flow.confirm(
         client_telegram_user_id=payload.client_telegram_user_id,
         master_id=payload.master_id,
         service_type=payload.service_type,
         slot_start=payload.slot_start,
     )
+    emit_event(
+        "booking_flow_confirm",
+        client_telegram_user_id=payload.client_telegram_user_id,
+        master_id=payload.master_id,
+        service_type=payload.service_type,
+        slot_start=payload.slot_start.isoformat(),
+        created=response.get("created"),
+        booking_id=response.get("booking_id"),
+    )
+    return response
 
 
 @app.post("/internal/telegram/client/booking-flow/cancel")
+@instrument_endpoint(
+    "POST",
+    "/internal/telegram/client/booking-flow/cancel",
+    booking_action="booking_flow_cancel_client",
+    outcome_key="cancelled",
+)
 def telegram_booking_flow_cancel(payload: TelegramFlowCancelRequest) -> dict[str, object]:
     flow = TelegramBookingFlowService(get_engine())
-    return flow.cancel(
+    response = flow.cancel(
         client_telegram_user_id=payload.client_telegram_user_id,
         booking_id=payload.booking_id,
     )
+    emit_event(
+        "booking_flow_cancel_client",
+        client_telegram_user_id=payload.client_telegram_user_id,
+        booking_id=payload.booking_id,
+        cancelled=response.get("cancelled"),
+    )
+    return response
 
 
 @app.post("/internal/telegram/master/booking-flow/cancel")
+@instrument_endpoint(
+    "POST",
+    "/internal/telegram/master/booking-flow/cancel",
+    booking_action="booking_flow_cancel_master",
+    outcome_key="cancelled",
+)
 def telegram_master_booking_flow_cancel(payload: TelegramFlowMasterCancelRequest) -> dict[str, object]:
     flow = TelegramBookingFlowService(get_engine())
-    return flow.cancel_by_master(
+    response = flow.cancel_by_master(
         master_telegram_user_id=payload.master_telegram_user_id,
         booking_id=payload.booking_id,
         reason=payload.reason,
     )
+    emit_event(
+        "booking_flow_cancel_master",
+        master_telegram_user_id=payload.master_telegram_user_id,
+        booking_id=payload.booking_id,
+        reason_provided=bool(payload.reason.strip()),
+        cancelled=response.get("cancelled"),
+    )
+    return response
 
 
 @app.post("/internal/telegram/master/schedule/day-off")
+@instrument_endpoint(
+    "POST",
+    "/internal/telegram/master/schedule/day-off",
+    booking_action="schedule_day_off",
+    outcome_key="applied",
+)
 def telegram_master_schedule_day_off(payload: TelegramMasterDayOffUpsertRequest) -> dict[str, object]:
     service = MasterScheduleService(get_engine())
     result = service.upsert_day_off(
@@ -247,15 +321,29 @@ def telegram_master_schedule_day_off(payload: TelegramMasterDayOffUpsertRequest)
             block_id=payload.block_id,
         ),
     )
-    return {
+    response = {
         "applied": result.applied,
         "created": result.created,
         "block_id": result.block_id,
         "message": result.message,
     }
+    emit_event(
+        "schedule_day_off_upsert",
+        master_telegram_user_id=payload.master_telegram_user_id,
+        block_id=result.block_id,
+        applied=result.applied,
+        created=result.created,
+    )
+    return response
 
 
 @app.post("/internal/telegram/master/schedule/lunch")
+@instrument_endpoint(
+    "POST",
+    "/internal/telegram/master/schedule/lunch",
+    booking_action="schedule_lunch_update",
+    outcome_key="applied",
+)
 def telegram_master_schedule_lunch(payload: TelegramMasterLunchUpdateRequest) -> dict[str, object]:
     service = MasterScheduleService(get_engine())
     result = service.update_lunch_break(
@@ -265,13 +353,27 @@ def telegram_master_schedule_lunch(payload: TelegramMasterLunchUpdateRequest) ->
             lunch_end=payload.lunch_end,
         ),
     )
-    return {
+    response = {
         "applied": result.applied,
         "message": result.message,
     }
+    emit_event(
+        "schedule_lunch_update",
+        master_telegram_user_id=payload.master_telegram_user_id,
+        lunch_start=payload.lunch_start.isoformat(),
+        lunch_end=payload.lunch_end.isoformat(),
+        applied=result.applied,
+    )
+    return response
 
 
 @app.post("/internal/telegram/master/schedule/manual-booking")
+@instrument_endpoint(
+    "POST",
+    "/internal/telegram/master/schedule/manual-booking",
+    booking_action="schedule_manual_booking",
+    outcome_key="applied",
+)
 def telegram_master_schedule_manual_booking(payload: TelegramMasterManualBookingRequest) -> dict[str, object]:
     service = MasterScheduleService(get_engine())
     result = service.create_manual_booking(
@@ -282,8 +384,17 @@ def telegram_master_schedule_manual_booking(payload: TelegramMasterManualBooking
             slot_start=payload.slot_start,
         ),
     )
-    return {
+    response = {
         "applied": result.applied,
         "booking_id": result.booking_id,
         "message": result.message,
     }
+    emit_event(
+        "schedule_manual_booking",
+        master_telegram_user_id=payload.master_telegram_user_id,
+        service_type=payload.service_type,
+        slot_start=payload.slot_start.isoformat(),
+        applied=result.applied,
+        booking_id=result.booking_id,
+    )
+    return response

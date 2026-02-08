@@ -22,6 +22,15 @@
   - Purpose: container and runtime health probe.
   - Response `200`: `{"status":"ok","service":"bot-api"}`
 
+- `GET /metrics`
+  - Purpose: Prometheus metrics endpoint for runtime health and booking/API telemetry.
+  - Response `200`: text/plain in Prometheus exposition format.
+  - Includes:
+    - `bot_api_service_health` gauge (`1` healthy, `0` unhealthy).
+    - `bot_api_requests_total{method,path,status_code}` counter.
+    - `bot_api_request_latency_seconds{method,path}` histogram.
+    - `bot_api_booking_outcomes_total{action,outcome}` counter.
+
 - `POST /internal/auth/resolve-role`
   - Purpose: resolve role by `telegram_user_id` from DB mapping.
   - Request: `{"telegram_user_id": 1000001}`
@@ -161,3 +170,23 @@
     - Applies ownership check to target master profile.
     - Rejects overlap with active bookings, day-off blocks, and lunch interval.
     - Created manual booking occupies slot for subsequent availability and booking checks.
+
+## 5) Observability event schema (EPIC-007 group-01)
+
+- Structured log baseline:
+  - Every event is a JSON object with at least: `event`, `service`, `ts`.
+  - `service` is fixed as `bot-api`.
+  - `ts` uses ISO-8601 UTC timestamp.
+- Event names currently emitted:
+  - `startup`
+  - `rbac_deny`
+  - `booking_create`
+  - `booking_flow_confirm`
+  - `booking_flow_cancel_client`
+  - `booking_flow_cancel_master`
+  - `schedule_day_off_upsert`
+  - `schedule_lunch_update`
+  - `schedule_manual_booking`
+- Redaction policy:
+  - Keys containing `token`, `secret`, `password`, `authorization`, `api_key`, `database_url` are replaced with `[REDACTED]`.
+  - Raw `TELEGRAM_BOT_TOKEN` value is masked from any string field if present.

@@ -3,7 +3,7 @@
 Legend: TODO / IN_PROGRESS / DONE
 Sizing target: each task is 1-3 dev-days.
 
-- T-001 — Define observability event schema and redaction policy — Status: TODO
+- T-001 — Define observability event schema and redaction policy — Status: DONE
   - Scope: define structured log event names/fields for booking lifecycle and security denials; codify forbidden fields (token/secrets/raw PII payloads).
   - Acceptance:
     - required fields for startup, booking create/cancel, schedule update, and `rbac_deny` are documented.
@@ -11,7 +11,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 1 dev-day
   - Dependencies: none
 
-- T-002 — Implement structured JSON logging baseline — Status: TODO
+- T-002 — Implement structured JSON logging baseline — Status: DONE
   - Scope: add/revise app logging so core lifecycle events follow schema and redaction rules.
   - Acceptance:
     - startup and core booking/schedule/security actions emit structured JSON logs.
@@ -19,7 +19,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 2 dev-days
   - Dependencies: T-001
 
-- T-003 — Expose metrics endpoint and latency/outcome instrumentation — Status: TODO
+- T-003 — Expose metrics endpoint and latency/outcome instrumentation — Status: DONE
   - Scope: add `/metrics` endpoint and instrument API request latency plus booking success/failure counters.
   - Acceptance:
     - `/metrics` responds in Prometheus format.

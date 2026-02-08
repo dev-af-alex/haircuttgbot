@@ -44,3 +44,16 @@ Add an operations baseline for single-VM production: structured logs, metrics, a
 - Group 01: structured logs + Prometheus metrics baseline.
 - Group 02: PostgreSQL backup/restore runbook + rehearsal commands.
 - Group 03: alert baseline + smoke/doc sync + closure checks.
+
+## Group 01 observability contract
+
+- Structured event envelope: `event`, `service`, `ts` (ISO-8601 UTC).
+- Mandatory security event: `rbac_deny` with actor and command context.
+- Booking/schedule lifecycle events emit only operational identifiers/outcomes; raw secrets are forbidden.
+- Redaction policy masks keys containing `token`, `secret`, `password`, `authorization`, `api_key`, `database_url` and masks raw `TELEGRAM_BOT_TOKEN` values in string fields.
+
+## Delivered (Group 01)
+
+- Added structured event logging for startup, RBAC-deny, booking lifecycle, and master schedule-write actions.
+- Added `/metrics` endpoint with health gauge, request count/latency histogram, and booking/schedule outcome counters.
+- Added regression tests for log redaction and metric updates after booking requests.

@@ -18,6 +18,6 @@
 ## 4) Observability
 
 - Logs: structured application and security logs for booking/schedule actions.
-- Metrics: TODO (command latency, booking success/failure, webhook processing queue).
+- Metrics: baseline implemented for API latency (`bot_api_request_latency_seconds`), request count (`bot_api_requests_total`), health (`bot_api_service_health`), and booking/schedule outcomes (`bot_api_booking_outcomes_total`).
 - Traces: TODO (if distributed components added beyond single service).
 - Alerts: TODO (service down, DB connectivity issues, high booking error rate).

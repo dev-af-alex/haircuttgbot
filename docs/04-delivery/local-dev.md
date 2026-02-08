@@ -29,6 +29,7 @@ A developer can run:
 ## Ports
 
 - `8080`: `bot-api` HTTP endpoint (`/health`)
+  - observability endpoint: `/metrics`
 
 ## Services and health checks
 
@@ -45,11 +46,13 @@ A developer can run:
    `docker compose exec -T bot-api python -m app.db.seed`
 3. Check API health endpoint:
    `curl -fsS http://localhost:8080/health`
-4. Validate seed result (at least 2 masters):
+4. Check metrics endpoint and core metric families:
+   `curl -fsS http://localhost:8080/metrics | grep -E 'bot_api_service_health|bot_api_requests_total|bot_api_request_latency_seconds|bot_api_booking_outcomes_total'`
+5. Validate seed result (at least 2 masters):
    `docker compose exec -T postgres psql -U haircuttgbot -d haircuttgbot -c "SELECT count(*) FROM masters;"`
-5. Confirm startup structured log exists:
+6. Confirm startup structured log exists:
    `docker compose logs bot-api --tail=50 | grep '"event": "startup"'`
-6. Validate booking/cancellation flow + master schedule updates (day-off/lunch/manual booking):
+7. Validate booking/cancellation flow + master schedule updates (day-off/lunch/manual booking):
    `docker compose exec -T bot-api python - <<'PY'
 import json
 import urllib.request
