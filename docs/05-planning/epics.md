@@ -70,7 +70,7 @@ Rules:
     - Local-run impact: local behavior includes dynamic availability recalculation after master schedule edits.
     - Delivered: master day-off management, lunch-break update flow, manual booking flow with ownership/conflict checks, and updated local smoke coverage for schedule-change scenarios.
 
-- EPIC-007 — Observability + reliability baseline — Status: TODO
+- EPIC-007 — Observability + reliability baseline — Status: IN_PROGRESS
     - Goal: add production-ready logging, metrics, backup/restore runbook, and basic alerts for single VM operations.
     - Acceptance:
         - Structured logs include key security and booking lifecycle events without secret leakage.

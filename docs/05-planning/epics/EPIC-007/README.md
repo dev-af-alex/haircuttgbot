@@ -1,0 +1,46 @@
+# EPIC-007 — Observability + reliability baseline
+
+Status: IN_PROGRESS
+
+## Goal
+
+Add an operations baseline for single-VM production: structured logs, metrics, alerts, and a validated PostgreSQL backup/restore runbook.
+
+## Scope
+
+- Structured JSON logging for booking/security lifecycle events with secret-safe payload rules.
+- Prometheus metrics endpoint with health, request latency, and booking outcome counters.
+- Minimal alert baseline for service health and booking failure spikes.
+- Backup and restore runbook for PostgreSQL with local rehearsal evidence.
+
+## Out of scope
+
+- Full production monitoring stack (Grafana/Loki provisioning) beyond local validation.
+- Multi-node/high-availability deployment patterns.
+- VM rollout packaging and rollback bundle details (EPIC-008).
+
+## Acceptance criteria
+
+- Structured logs include booking lifecycle and RBAC-deny events without token/secret leakage.
+- `/metrics` exposes health, request latency, and booking success/failure counters.
+- Backup + restore procedure is documented and validated in local rehearsal.
+- Local smoke path remains executable with `docker compose up -d --build`.
+
+## Dependencies
+
+- EPIC-001 runtime/CI baseline.
+- EPIC-004 booking flow baseline.
+- EPIC-006 schedule-management baseline.
+
+## Deliverables
+
+- Logging and metrics instrumentation in `bot-api`.
+- Operational runbook updates in delivery docs.
+- Rehearsal steps and verification outputs for backup/restore.
+- Updated epic planning artifacts (tasks + PR groups).
+
+## Planned PR groups
+
+- Group 01: structured logs + Prometheus metrics baseline.
+- Group 02: PostgreSQL backup/restore runbook + rehearsal commands.
+- Group 03: alert baseline + smoke/doc sync + closure checks.
