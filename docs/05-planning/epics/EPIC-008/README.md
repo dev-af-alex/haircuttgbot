@@ -47,3 +47,13 @@ Package and deploy the working Telegram bot stack onto one Linux VM with reprodu
 
 - Every PR group must keep local `docker compose` workflow operational.
 - Merge method remains merge-commit per repository policy.
+
+## Delivered (Group 01)
+
+- Defined single-VM deployment contract in `docs/04-delivery/deploy-vm.md`:
+  - VM/runtime assumptions
+  - host prerequisites and required ports
+  - release artifact boundaries and VM filesystem layout
+  - secrets/config separation policy
+- Finalized deployment decision ADR in `docs/90-decisions/adr-0005-single-vm-deployment-rollout-strategy.md`.
+- Marked `T-001` and `group-01` as `DONE`.

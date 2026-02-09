@@ -3,7 +3,7 @@
 Legend: TODO / IN_PROGRESS / DONE
 Sizing target: each task is 1-3 dev-days.
 
-- T-001 — Define single-VM deployment contract and release artifact shape — Status: TODO
+- T-001 — Define single-VM deployment contract and release artifact shape — Status: DONE
   - Scope: define VM runtime assumptions, compose/deployment artifact layout, and required environment/secret files.
   - Acceptance:
     - deployment contract includes VM prerequisites, ports, runtime services, and artifact boundaries.

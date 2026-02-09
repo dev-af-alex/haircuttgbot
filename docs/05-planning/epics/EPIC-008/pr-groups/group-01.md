@@ -1,6 +1,6 @@
 # EPIC-008 / PR Group 01
 
-Status: TODO
+Status: DONE
 
 ## Objective
 
@@ -31,4 +31,4 @@ Define deployment baseline contract and decide release/rollback approach before 
 
 ## Task status
 
-- T-001: TODO
+- T-001: DONE
