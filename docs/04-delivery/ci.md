@@ -13,7 +13,7 @@ Merge strategy: merge-commit.
 ## Implemented baseline
 
 - Workflow file: `.github/workflows/ci.yml`
-- Dependency update automation: `.github/dependabot.yml` (weekly `pip` + GitHub Actions updates)
+- Dependency update automation: `.github/dependabot.yml` (weekly grouped `pip` + GitHub Actions updates to reduce incompatible single-package bumps)
 - Trigger: every `pull_request` and push to `master`
 - Python version: `3.12`
 - Postgres service for migration checks in CI
@@ -23,6 +23,12 @@ Security tools:
 - SAST: `bandit` (runs `bandit -q -r app`)
 - Dependency scan: `pip-audit` (runs `pip-audit` and fails on known vulnerabilities)
 - Secrets scan: `gitleaks/gitleaks-action@v2`
+
+Dependency policy baseline:
+
+- Keep direct runtime dependencies pinned in `requirements.txt`.
+- Do not pin transitive packages manually unless there is an active incident with no parent-package fix.
+- Dependabot opens grouped updates so dependency graph changes are validated together by CI.
 
 Schema regression check:
 
