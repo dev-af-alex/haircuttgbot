@@ -38,7 +38,7 @@ Mandatory gates (must exist in CI):
 
 ## 4) Auditability
 
-- What to log: role-sensitive actions (booking create/cancel, manual booking, day-off/lunch updates), actor ID, timestamp, result; plus RBAC denials (`rbac_deny`) with telegram user ID, requested command, resolved role, and deny reason.
+- What to log: role-sensitive actions (booking create/cancel, manual booking, day-off/lunch updates, master add/remove), actor ID, timestamp, result; plus RBAC denials (`rbac_deny`) with telegram user ID, requested command, resolved role, and deny reason.
 - What must never be logged: bot token, raw secrets, excessive personal message content.
 - Retention:
   - Application/security logs retained 30 days hot on VM.

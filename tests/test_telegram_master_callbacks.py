@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
@@ -9,6 +9,7 @@ from sqlalchemy.engine import Engine
 from app.telegram.callbacks import TelegramCallbackRouter
 
 sqlite3.register_adapter(datetime, lambda value: value.isoformat())
+sqlite3.register_adapter(time, lambda value: value.isoformat())
 
 
 def _setup_flow_schema() -> Engine:
@@ -80,7 +81,9 @@ def _setup_flow_schema() -> Engine:
                 INSERT INTO users (id, telegram_user_id, role_id)
                 VALUES
                     (10, 1000001, 2),
-                    (20, 2000001, 1)
+                    (11, 1000002, 2),
+                    (20, 2000001, 1),
+                    (21, 2000002, 1)
                 """
             )
         )
@@ -89,7 +92,8 @@ def _setup_flow_schema() -> Engine:
                 """
                 INSERT INTO masters (id, user_id, display_name, is_active, work_start, work_end, lunch_start, lunch_end)
                 VALUES
-                    (1, 10, 'Master Demo 1', 1, '10:00:00', '21:00:00', '13:00:00', '14:00:00')
+                    (1, 10, 'Master Demo 1', 1, '10:00:00', '21:00:00', '13:00:00', '14:00:00'),
+                    (2, 11, 'Master Demo 2', 1, '10:00:00', '21:00:00', '13:00:00', '14:00:00')
                 """
             )
         )
@@ -200,3 +204,80 @@ def test_master_interactive_cancel_requires_reason_and_sends_notifications() -> 
     result = router.handle(telegram_user_id=1000001, data="hb1|mcn")
     assert "успешно отменена" in result.text
     assert len(result.notifications) == 2
+
+
+def test_bootstrap_master_can_add_and_remove_other_masters() -> None:
+    engine = _setup_flow_schema()
+    router = TelegramCallbackRouter(engine, bootstrap_master_telegram_user_id=1000001)
+    router.seed_root_menu(telegram_user_id=1000001)
+
+    result = router.handle(telegram_user_id=1000001, data="hb1|mm")
+    manage_callbacks = _callbacks_for_action(result.reply_markup, "mam")
+    assert manage_callbacks
+
+    result = router.handle(telegram_user_id=1000001, data=manage_callbacks[0])
+    assert "Управление мастерами" in result.text
+
+    result = router.handle(telegram_user_id=1000001, data="hb1|maa")
+    add_callbacks = _callbacks_for_action(result.reply_markup, "mau")
+    assert add_callbacks
+
+    add_target = [item for item in add_callbacks if item.endswith("|2000002")]
+    assert add_target
+    result = router.handle(telegram_user_id=1000001, data=add_target[0])
+    assert "добавлен" in result.text.lower() or "активен" in result.text.lower()
+
+    with engine.begin() as conn:
+        role_name = conn.execute(
+            text(
+                """
+                SELECT r.name
+                FROM users u
+                JOIN roles r ON r.id = u.role_id
+                WHERE u.telegram_user_id = 2000002
+                """
+            )
+        ).scalar_one()
+        assert role_name == "Master"
+
+        is_active = conn.execute(
+            text(
+                """
+                SELECT m.is_active
+                FROM masters m
+                JOIN users u ON u.id = m.user_id
+                WHERE u.telegram_user_id = 2000002
+                """
+            )
+        ).scalar_one()
+        assert bool(is_active) is True
+
+    result = router.handle(telegram_user_id=1000001, data="hb1|mad")
+    remove_callbacks = _callbacks_for_action(result.reply_markup, "mar")
+    assert remove_callbacks
+    remove_target = [item for item in remove_callbacks if item.endswith("|1000002")]
+    assert remove_target
+    result = router.handle(telegram_user_id=1000001, data=remove_target[0])
+    assert "удален" in result.text.lower() or "неактив" in result.text.lower()
+
+    with engine.begin() as conn:
+        is_active = conn.execute(
+            text(
+                """
+                SELECT m.is_active
+                FROM masters m
+                JOIN users u ON u.id = m.user_id
+                WHERE u.telegram_user_id = 1000002
+                """
+            )
+        ).scalar_one()
+        assert bool(is_active) is False
+
+
+def test_non_bootstrap_master_is_denied_for_master_admin_callbacks() -> None:
+    engine = _setup_flow_schema()
+    router = TelegramCallbackRouter(engine, bootstrap_master_telegram_user_id=1000001)
+    router.seed_root_menu(telegram_user_id=1000002)
+
+    result = router.handle(telegram_user_id=1000002, data="hb1|mam")
+    assert "Недостаточно прав" in result.text

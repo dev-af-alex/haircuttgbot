@@ -28,6 +28,7 @@ _REQUEST_LATENCY_BUCKETS = (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 
 _REQUESTS_TOTAL: dict[tuple[str, str, str], float] = {}
 _REQUEST_LATENCY: dict[tuple[str, str], dict[str, float | list[float]]] = {}
 _BOOKING_OUTCOMES_TOTAL: dict[tuple[str, str], float] = {}
+_MASTER_ADMIN_OUTCOMES_TOTAL: dict[tuple[str, str], float] = {}
 _ABUSE_OUTCOMES_TOTAL: dict[tuple[str, str], float] = {}
 _TELEGRAM_DELIVERY_OUTCOMES_TOTAL: dict[tuple[str, str], float] = {}
 _SERVICE_HEALTH = 1.0
@@ -123,6 +124,12 @@ def observe_booking_outcome(action: str, success: bool) -> None:
         _BOOKING_OUTCOMES_TOTAL[key] = _BOOKING_OUTCOMES_TOTAL.get(key, 0.0) + 1.0
 
 
+def observe_master_admin_outcome(action: str, outcome: str) -> None:
+    key = (action, outcome)
+    with _METRICS_LOCK:
+        _MASTER_ADMIN_OUTCOMES_TOTAL[key] = _MASTER_ADMIN_OUTCOMES_TOTAL.get(key, 0.0) + 1.0
+
+
 def observe_abuse_outcome(path: str, allowed: bool) -> None:
     outcome = "allow" if allowed else "deny"
     key = (path, outcome)
@@ -185,6 +192,14 @@ def render_metrics() -> tuple[bytes, str]:
         for (action, outcome), value in sorted(_BOOKING_OUTCOMES_TOTAL.items()):
             lines.append(
                 "bot_api_booking_outcomes_total"
+                f'{{action="{_escape_label(action)}",outcome="{_escape_label(outcome)}"}} {value:.1f}'
+            )
+
+        lines.append("# HELP bot_api_master_admin_outcomes_total Outcomes for bootstrap master add/remove operations.")
+        lines.append("# TYPE bot_api_master_admin_outcomes_total counter")
+        for (action, outcome), value in sorted(_MASTER_ADMIN_OUTCOMES_TOTAL.items()):
+            lines.append(
+                "bot_api_master_admin_outcomes_total"
                 f'{{action="{_escape_label(action)}",outcome="{_escape_label(outcome)}"}} {value:.1f}'
             )
 

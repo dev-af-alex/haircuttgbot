@@ -1,0 +1,33 @@
+# Разрешить любые команды, где argv[0] == "docker" (включая: docker compose ...)
+prefix_rule(
+    pattern = ["docker"],
+    decision = "allow",
+    justification = "Allow any docker commands without prompting",
+    match = [
+        "docker ps",
+        "docker compose up -d",
+        "docker run --rm hello-world",
+    ],
+)
+
+# Разрешить любые команды, где argv[0] == "docker-compose"
+prefix_rule(
+    pattern = ["docker-compose"],
+    decision = "allow",
+    justification = "Allow any docker-compose commands without prompting",
+    match = [
+        "docker-compose ps",
+        "docker-compose up -d",
+    ],
+)
+
+# Разрешить любые команды, где argv[0] == "curl"
+prefix_rule(
+    pattern = ["curl"],
+    decision = "allow",
+    justification = "Allow any curl commands without prompting",
+    match = [
+        "curl -I https://example.com",
+        "curl -fsSL https://example.com | head",
+    ],
+)

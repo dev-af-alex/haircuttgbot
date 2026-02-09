@@ -9,7 +9,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
 from app.main import CreateBookingRequest, create_booking, health, metrics
-from app.observability import emit_event
+from app.observability import emit_event, observe_master_admin_outcome
 
 sqlite3.register_adapter(datetime, lambda value: value.isoformat())
 
@@ -217,3 +217,23 @@ def test_metrics_endpoint_tracks_request_latency_and_booking_outcomes(monkeypatc
     assert after_failure >= before_failure + 1.0
     assert 'bot_api_request_latency_seconds_count{method="POST",path="/internal/booking/create"}' in after
     assert health_value == 1.0
+
+
+def test_metrics_include_master_admin_outcomes_counter() -> None:
+    before = metrics().body.decode("utf-8")
+    before_value = _metric_value(
+        before,
+        "bot_api_master_admin_outcomes_total",
+        {"action": "add", "outcome": "success"},
+        default=0.0,
+    )
+
+    observe_master_admin_outcome("add", "success")
+
+    after = metrics().body.decode("utf-8")
+    after_value = _metric_value(
+        after,
+        "bot_api_master_admin_outcomes_total",
+        {"action": "add", "outcome": "success"},
+    )
+    assert after_value >= before_value + 1.0

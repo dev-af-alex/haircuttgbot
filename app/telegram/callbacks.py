@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time as dt_time, timedelta
 from re import compile as re_compile
@@ -14,6 +15,7 @@ from app.auth import RoleRepository, authorize_command
 from app.auth.messages import RU_MESSAGES
 from app.booking import (
     BookingFlowRepository,
+    MasterAdminService,
     MasterDayOffCommand,
     MasterLunchBreakCommand,
     MasterManualBookingCommand,
@@ -22,7 +24,8 @@ from app.booking import (
     TelegramBookingFlowService,
     list_service_options,
 )
-from app.observability import emit_event
+from app.db.seed import BOOTSTRAP_MASTER_TELEGRAM_ID_ENV, resolve_bootstrap_master_telegram_id
+from app.observability import emit_event, observe_master_admin_outcome
 
 CALLBACK_DATA_MAX_LENGTH = 64
 CALLBACK_PREFIX = "hb1"
@@ -37,6 +40,7 @@ _MASTER_LUNCH_PRESETS = {
     "p14": ("14:00:00", "15:00:00"),
     "p18": ("18:00:00", "19:00:00"),
 }
+_MASTER_ADMIN_LIMIT = 20
 
 _ALLOWED_ACTIONS = {
     "hm",
@@ -67,6 +71,11 @@ _ALLOWED_ACTIONS = {
     "mci",
     "mcr",
     "mcn",
+    "mam",
+    "maa",
+    "mau",
+    "mad",
+    "mar",
 }
 _CONTEXT_PATTERN = re_compile(r"^[A-Za-z0-9_-]{1,32}$")
 _SLOT_TOKEN_PATTERN = re_compile(r"^\d{12}$")
@@ -99,6 +108,11 @@ _ACTION_REQUIRED_COMMAND = {
     "mci": "master:schedule",
     "mcr": "master:schedule",
     "mcn": "master:schedule",
+    "mam": "master:schedule",
+    "maa": "master:schedule",
+    "mau": "master:schedule",
+    "mad": "master:schedule",
+    "mar": "master:schedule",
 }
 
 _MENU_ROOT = "root"
@@ -122,11 +136,14 @@ _MENU_MASTER_MANUAL_CONFIRM = "master_manual_confirm"
 _MENU_MASTER_CANCEL_SELECT = "master_cancel_select"
 _MENU_MASTER_CANCEL_REASON_SELECT = "master_cancel_reason_select"
 _MENU_MASTER_CANCEL_CONFIRM = "master_cancel_confirm"
+_MENU_MASTER_ADMIN = "master_admin_menu"
+_MENU_MASTER_ADMIN_ADD_SELECT = "master_admin_add_select"
+_MENU_MASTER_ADMIN_REMOVE_SELECT = "master_admin_remove_select"
 
 _MENU_ALLOWED_ACTIONS = {
     _MENU_ROOT: {"hm", "cm", "mm"},
     _MENU_CLIENT: {"hm", "bk", "cb", "cc"},
-    _MENU_MASTER: {"hm", "bk", "msv", "msd", "mlm", "msb", "msc"},
+    _MENU_MASTER: {"hm", "bk", "msv", "msd", "mlm", "msb", "msc", "mam"},
     _MENU_CLIENT_MASTER_SELECT: {"hm", "bk", "csm"},
     _MENU_CLIENT_SERVICE_SELECT: {"hm", "bk", "css"},
     _MENU_CLIENT_DATE_SELECT: {"hm", "bk", "csd"},
@@ -143,12 +160,16 @@ _MENU_ALLOWED_ACTIONS = {
     _MENU_MASTER_CANCEL_SELECT: {"hm", "mr", "mci"},
     _MENU_MASTER_CANCEL_REASON_SELECT: {"hm", "mr", "mcr"},
     _MENU_MASTER_CANCEL_CONFIRM: {"hm", "mr", "mcn"},
+    _MENU_MASTER_ADMIN: {"hm", "mr", "maa", "mad"},
+    _MENU_MASTER_ADMIN_ADD_SELECT: {"hm", "mr", "mau"},
+    _MENU_MASTER_ADMIN_REMOVE_SELECT: {"hm", "mr", "mar"},
 }
 
 _MENU_TEXT = {
     _MENU_ROOT: "Главное меню. Выберите раздел.",
     _MENU_CLIENT: "Меню клиента. Выберите действие.",
     _MENU_MASTER: "Меню мастера. Выберите действие.",
+    _MENU_MASTER_ADMIN: "Управление мастерами. Выберите действие.",
 }
 
 _ACTION_TARGET_MENU = {
@@ -156,6 +177,7 @@ _ACTION_TARGET_MENU = {
     "cm": _MENU_CLIENT,
     "mm": _MENU_MASTER,
     "mr": _MENU_MASTER,
+    "mam": _MENU_MASTER_ADMIN,
     "bk": _MENU_ROOT,
 }
 
@@ -237,13 +259,30 @@ class CallbackStateStore:
 
 
 class TelegramCallbackRouter:
-    def __init__(self, engine: Engine, *, state_store: CallbackStateStore | None = None) -> None:
+    def __init__(
+        self,
+        engine: Engine,
+        *,
+        state_store: CallbackStateStore | None = None,
+        bootstrap_master_telegram_user_id: int | None = None,
+    ) -> None:
         self._engine = engine
         self._roles = RoleRepository(engine)
         self._flow = TelegramBookingFlowService(engine)
         self._flow_repo = BookingFlowRepository(engine)
         self._schedule = MasterScheduleService(engine)
+        self._master_admin = MasterAdminService(engine)
+        self._bootstrap_master_telegram_user_id = (
+            bootstrap_master_telegram_user_id
+            if bootstrap_master_telegram_user_id is not None
+            else self._resolve_bootstrap_telegram_user_id()
+        )
         self._state = state_store or CallbackStateStore()
+
+    @staticmethod
+    def _resolve_bootstrap_telegram_user_id() -> int:
+        raw_value = os.getenv(BOOTSTRAP_MASTER_TELEGRAM_ID_ENV, "1000001")
+        return resolve_bootstrap_master_telegram_id(raw_value)
 
     def seed_root_menu(self, telegram_user_id: int) -> None:
         self._state.set_menu(telegram_user_id, _MENU_ROOT, reset_context=True)
@@ -288,6 +327,30 @@ class TelegramCallbackRouter:
                     reply_markup=build_root_menu_markup(),
                 )
 
+        if payload.action in {"mam", "maa", "mau", "mad", "mar"} and not self._is_bootstrap_master(
+            telegram_user_id=telegram_user_id
+        ):
+            observe_master_admin_outcome("rbac", "denied")
+            emit_event(
+                "master_admin_action",
+                actor_telegram_user_id=telegram_user_id,
+                target_telegram_user_id=None,
+                action="rbac",
+                outcome="denied",
+                reason="bootstrap_only",
+            )
+            emit_event(
+                "rbac_deny",
+                telegram_user_id=telegram_user_id,
+                command=f"callback:{payload.action}",
+                role=role,
+                reason="bootstrap_only",
+            )
+            return CallbackHandleResult(
+                text=RU_MESSAGES["forbidden"],
+                reply_markup=build_menu_markup(_MENU_MASTER),
+            )
+
         if self._state.mark_stale(telegram_user_id, action=payload.action):
             emit_event(
                 "telegram_callback_stale",
@@ -324,6 +387,10 @@ class TelegramCallbackRouter:
             "mci": self._handle_master_cancel_pick_booking,
             "mcr": self._handle_master_cancel_pick_reason,
             "mcn": lambda user_id, _: self._handle_master_cancel_confirm(telegram_user_id=user_id),
+            "maa": lambda user_id, _: self._handle_master_admin_add_start(telegram_user_id=user_id),
+            "mau": self._handle_master_admin_add_apply,
+            "mad": lambda user_id, _: self._handle_master_admin_remove_start(telegram_user_id=user_id),
+            "mar": self._handle_master_admin_remove_apply,
         }
         handler = handlers.get(payload.action)
         if handler is None:
@@ -332,7 +399,7 @@ class TelegramCallbackRouter:
 
     def _handle_static_menu_action(self, *, telegram_user_id: int, action: str) -> CallbackHandleResult:
         target_menu = _ACTION_TARGET_MENU[action]
-        reset_context = target_menu in {_MENU_ROOT, _MENU_MASTER}
+        reset_context = target_menu in {_MENU_ROOT, _MENU_MASTER, _MENU_MASTER_ADMIN}
         self._state.set_menu(telegram_user_id, target_menu, reset_context=reset_context)
         return CallbackHandleResult(
             text=_MENU_TEXT[target_menu],
@@ -802,6 +869,109 @@ class TelegramCallbackRouter:
             notifications=_coerce_notifications(response.get("notifications")),
         )
 
+    def _handle_master_admin_add_start(self, *, telegram_user_id: int) -> CallbackHandleResult:
+        candidates = self._master_admin.list_promotable_users(limit=_MASTER_ADMIN_LIMIT)
+        if not candidates:
+            self._state.set_menu(telegram_user_id, _MENU_MASTER_ADMIN)
+            observe_master_admin_outcome("add", "rejected")
+            emit_event(
+                "master_admin_action",
+                actor_telegram_user_id=telegram_user_id,
+                target_telegram_user_id=None,
+                action="add",
+                outcome="rejected",
+                reason="no_candidates",
+            )
+            return CallbackHandleResult(
+                text="Нет пользователей для назначения мастером.",
+                reply_markup=build_menu_markup(_MENU_MASTER_ADMIN),
+            )
+
+        self._state.set_menu(telegram_user_id, _MENU_MASTER_ADMIN_ADD_SELECT)
+        return CallbackHandleResult(
+            text="Выберите пользователя для назначения мастером.",
+            reply_markup=build_master_admin_add_markup(candidates),
+        )
+
+    def _handle_master_admin_add_apply(self, telegram_user_id: int, context: str | None) -> CallbackHandleResult:
+        if context is None:
+            return self._invalid_response()
+        try:
+            target_telegram_user_id = int(context)
+        except ValueError:
+            return self._invalid_response()
+
+        result = self._master_admin.add_master(telegram_user_id=target_telegram_user_id)
+        self._state.set_menu(telegram_user_id, _MENU_MASTER_ADMIN, reset_context=True)
+        observe_master_admin_outcome("add", "success" if result.applied else "rejected")
+        emit_event(
+            "master_admin_action",
+            actor_telegram_user_id=telegram_user_id,
+            target_telegram_user_id=result.target_telegram_user_id,
+            action="add",
+            outcome="success" if result.applied else "rejected",
+        )
+        return CallbackHandleResult(
+            text=result.message,
+            reply_markup=build_menu_markup(_MENU_MASTER_ADMIN),
+        )
+
+    def _handle_master_admin_remove_start(self, *, telegram_user_id: int) -> CallbackHandleResult:
+        removable = self._master_admin.list_removable_masters(
+            bootstrap_master_telegram_user_id=self._bootstrap_master_telegram_user_id,
+            limit=_MASTER_ADMIN_LIMIT,
+        )
+        if not removable:
+            self._state.set_menu(telegram_user_id, _MENU_MASTER_ADMIN)
+            observe_master_admin_outcome("remove", "rejected")
+            emit_event(
+                "master_admin_action",
+                actor_telegram_user_id=telegram_user_id,
+                target_telegram_user_id=None,
+                action="remove",
+                outcome="rejected",
+                reason="no_removable_masters",
+            )
+            return CallbackHandleResult(
+                text="Нет активных мастеров для удаления.",
+                reply_markup=build_menu_markup(_MENU_MASTER_ADMIN),
+            )
+
+        self._state.set_menu(telegram_user_id, _MENU_MASTER_ADMIN_REMOVE_SELECT)
+        return CallbackHandleResult(
+            text="Выберите мастера для удаления из активных.",
+            reply_markup=build_master_admin_remove_markup(removable),
+        )
+
+    def _handle_master_admin_remove_apply(self, telegram_user_id: int, context: str | None) -> CallbackHandleResult:
+        if context is None:
+            return self._invalid_response()
+        try:
+            target_telegram_user_id = int(context)
+        except ValueError:
+            return self._invalid_response()
+
+        result = self._master_admin.remove_master(
+            telegram_user_id=target_telegram_user_id,
+            bootstrap_master_telegram_user_id=self._bootstrap_master_telegram_user_id,
+        )
+        self._state.set_menu(telegram_user_id, _MENU_MASTER_ADMIN, reset_context=True)
+        observe_master_admin_outcome("remove", "success" if result.applied else "rejected")
+        emit_event(
+            "master_admin_action",
+            actor_telegram_user_id=telegram_user_id,
+            target_telegram_user_id=result.target_telegram_user_id,
+            action="remove",
+            outcome="success" if result.applied else "rejected",
+        )
+        return CallbackHandleResult(
+            text=result.message,
+            reply_markup=build_menu_markup(_MENU_MASTER_ADMIN),
+        )
+
+    def _is_bootstrap_master(self, *, telegram_user_id: int) -> bool:
+        return telegram_user_id == self._bootstrap_master_telegram_user_id
+
     def _list_client_future_bookings(self, *, telegram_user_id: int) -> list[dict[str, object]]:
         client_user_id = self._flow_repo.resolve_client_user_id(telegram_user_id)
         if client_user_id is None:
@@ -972,6 +1142,14 @@ def build_menu_markup(menu: str) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="Обед", callback_data=encode_callback_data(action="mlm"))],
             [InlineKeyboardButton(text="Ручная запись", callback_data=encode_callback_data(action="msb"))],
             [InlineKeyboardButton(text="Отмена записи", callback_data=encode_callback_data(action="msc"))],
+            [InlineKeyboardButton(text="Управление мастерами", callback_data=encode_callback_data(action="mam"))],
+            [InlineKeyboardButton(text="Главное меню", callback_data=encode_callback_data(action="hm"))],
+        ]
+    elif menu == _MENU_MASTER_ADMIN:
+        rows = [
+            [InlineKeyboardButton(text="Добавить мастера", callback_data=encode_callback_data(action="maa"))],
+            [InlineKeyboardButton(text="Удалить мастера", callback_data=encode_callback_data(action="mad"))],
+            [InlineKeyboardButton(text="Назад", callback_data=encode_callback_data(action="mr"))],
             [InlineKeyboardButton(text="Главное меню", callback_data=encode_callback_data(action="hm"))],
         ]
     else:
@@ -1176,6 +1354,43 @@ def build_master_cancel_confirm_markup() -> InlineKeyboardMarkup:
             *(_back_and_home_rows(action_back="mr")),
         ]
     )
+
+
+def build_master_admin_add_markup(candidates: list[dict[str, object]]) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    for candidate in candidates:
+        telegram_user_id = candidate.get("telegram_user_id")
+        if not isinstance(telegram_user_id, int):
+            continue
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"tg:{telegram_user_id}",
+                    callback_data=encode_callback_data(action="mau", context=str(telegram_user_id)),
+                )
+            ]
+        )
+    rows.extend(_back_and_home_rows(action_back="mr"))
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def build_master_admin_remove_markup(masters: list[dict[str, object]]) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    for item in masters:
+        telegram_user_id = item.get("telegram_user_id")
+        display_name = item.get("display_name")
+        if not isinstance(telegram_user_id, int) or not isinstance(display_name, str):
+            continue
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{display_name} (tg:{telegram_user_id})",
+                    callback_data=encode_callback_data(action="mar", context=str(telegram_user_id)),
+                )
+            ]
+        )
+    rows.extend(_back_and_home_rows(action_back="mr"))
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def _service_rows(*, service_options: list[object], action: str) -> list[list[InlineKeyboardButton]]:

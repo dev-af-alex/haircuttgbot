@@ -10,6 +10,7 @@ from app.booking.contracts import (
 )
 from app.booking.create_booking import BookingCreateResult, BookingService
 from app.booking.flow import BookingFlowRepository, BookingNotification, BookingNotificationService, TelegramBookingFlowService
+from app.booking.master_admin import MasterAdminResult, MasterAdminService
 from app.booking.messages import RU_BOOKING_MESSAGES
 from app.booking.schedule import (
     MasterDayOffCommand,
@@ -47,6 +48,8 @@ __all__ = [
     "MasterManualBookingCommand",
     "MasterScheduleContext",
     "MasterScheduleService",
+    "MasterAdminResult",
+    "MasterAdminService",
     "BOOKING_STATUS_ACTIVE",
     "BOOKING_STATUS_CANCELLED_BY_CLIENT",
     "BOOKING_STATUS_CANCELLED_BY_MASTER",

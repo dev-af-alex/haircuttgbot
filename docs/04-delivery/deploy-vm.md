@@ -76,6 +76,7 @@ The bundle must not include real secret values.
 - Minimum secret set:
   - `TELEGRAM_BOT_TOKEN`
   - `TELEGRAM_UPDATES_MODE` (`polling` default in current baseline; `disabled` for maintenance windows)
+  - `BOOTSTRAP_MASTER_TELEGRAM_ID` (required positive integer Telegram user ID for bootstrap master provisioning)
   - `DATABASE_URL` (if not composed from service defaults)
   - any future third-party API keys
 
@@ -137,6 +138,7 @@ Create `/opt/haircuttgbot/shared/.env` from the template values:
 cat >/opt/haircuttgbot/shared/.env <<'ENV'
 TELEGRAM_BOT_TOKEN=replace_me
 TELEGRAM_UPDATES_MODE=polling
+BOOTSTRAP_MASTER_TELEGRAM_ID=1000001
 # Optional when defaults are overridden:
 # DATABASE_URL=postgresql+psycopg://haircuttgbot:haircuttgbot@postgres:5432/haircuttgbot
 ENV

@@ -23,7 +23,12 @@ from app.booking import (
     TelegramBookingFlowService,
     list_service_options,
 )
-from app.db.session import get_engine
+from app.db.seed import (
+    BOOTSTRAP_MASTER_TELEGRAM_ID_ENV,
+    resolve_bootstrap_master_telegram_id,
+    run_seed,
+)
+from app.db.session import get_database_url, get_engine
 from app.idempotency import CachedHttpResponse, TelegramIdempotencyStore
 from app.observability import (
     emit_event,
@@ -81,6 +86,20 @@ def _resolve_telegram_runtime_policy(*, raw_mode: str | None, bot_token: str) ->
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    try:
+        bootstrap_master_telegram_user_id = resolve_bootstrap_master_telegram_id(
+            os.getenv(BOOTSTRAP_MASTER_TELEGRAM_ID_ENV)
+        )
+    except ValueError as exc:
+        emit_event("bootstrap_seed_failed", reason="invalid_bootstrap_master_config", error=str(exc))
+        raise RuntimeError(str(exc)) from exc
+
+    run_seed(
+        get_database_url(),
+        bootstrap_master_telegram_id=bootstrap_master_telegram_user_id,
+    )
+    emit_event("bootstrap_seed_applied", bootstrap_master_telegram_user_id=bootstrap_master_telegram_user_id)
+
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     runtime_policy = _resolve_telegram_runtime_policy(
         raw_mode=os.getenv(_TELEGRAM_UPDATES_MODE_ENV),

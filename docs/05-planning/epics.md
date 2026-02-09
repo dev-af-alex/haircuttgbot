@@ -130,7 +130,7 @@ Rules:
     - Dependencies: EPIC-011, EPIC-010, EPIC-009.
     - Local-run impact: local runbook and smoke checks shift from command-centric Telegram validation to button-first scenarios while preserving existing compose runtime and CI security gates.
 
-- EPIC-013 — Bootstrap identity and master administration — Status: TODO
+- EPIC-013 — Bootstrap identity and master administration — Status: IN_PROGRESS
     - Goal: ensure baseline roles and one bootstrap master are always present after migration/startup, with bootstrap master Telegram ID configured via environment and delegated master management rights.
     - Acceptance:
         - On clean DB start, roles required by RBAC are created idempotently by migration/seed path (`Client`, `Master`).

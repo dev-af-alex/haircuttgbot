@@ -54,6 +54,7 @@ Telegram command contract baseline:
     - `bot_api_requests_total{method,path,status_code}` counter.
     - `bot_api_request_latency_seconds{method,path}` histogram.
     - `bot_api_booking_outcomes_total{action,outcome}` counter.
+    - `bot_api_master_admin_outcomes_total{action,outcome}` counter.
     - `bot_api_abuse_outcomes_total{path,outcome}` counter (`allow`/`deny` for Telegram throttling checks).
     - `bot_api_telegram_delivery_outcomes_total{path,outcome}` counter
       (`processed_success`, `processed_rejected`, `replayed`, `throttled`, `failed_transient`, `failed_terminal`).
@@ -258,6 +259,7 @@ Telegram command contract baseline:
   - `schedule_day_off_upsert`
   - `schedule_lunch_update`
   - `schedule_manual_booking`
+  - `master_admin_action`
   - `abuse_throttle_deny`
   - `telegram_idempotency_replay`
   - `telegram_delivery_outcome`

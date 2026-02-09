@@ -13,7 +13,8 @@ A developer can run:
 - Docker Engine
 - Docker Compose v2 (`docker compose`)
 - Optional for host-side unit tests: Python 3.12 virtualenv with dependencies installed in `.venv`
-- Optional: copy `.env.example` to `.env`, set `TELEGRAM_BOT_TOKEN`, and keep `TELEGRAM_UPDATES_MODE=polling` for real Telegram integration tests
+- Optional: copy `.env.example` to `.env`, set `TELEGRAM_BOT_TOKEN`, and keep `TELEGRAM_UPDATES_MODE=polling` for real Telegram integration tests.
+- Required bootstrap config: `BOOTSTRAP_MASTER_TELEGRAM_ID` must be a positive integer Telegram user ID (compose default is `1000001`).
 
 ## Local run steps (must be kept current)
 
