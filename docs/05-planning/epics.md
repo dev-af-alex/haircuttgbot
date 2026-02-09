@@ -110,8 +110,8 @@ Rules:
     - Local-run impact: local compose run remains stable while adding duplicate-delivery guards and retry-oriented observability checks.
     - Delivered: Group 01 delivered accepted delivery-idempotency ADR + Telegram write-path replay guard + baseline replay tests; Group 02 delivered retry/error outcome classification + delivery observability metric/event mapping + duplicate-delivery smoke expansion; Group 03 delivered closure doc-sync and merge-gate readiness checks for epic close-out.
 
-- EPIC-011 — Real Telegram runtime integration (aiogram updates path) — Status: DONE
-    - Goal: connect aiogram handlers to existing booking/schedule services so the bot can be tested via real Telegram chats.
+- EPIC-011 — Real Telegram runtime integration (aiogram updates path, command baseline) — Status: DONE
+    - Goal: connect aiogram handlers to existing booking/schedule services so the bot can be tested via real Telegram chats, with command-driven baseline interactions.
     - Acceptance:
         - incoming Telegram updates are processed through an implemented runtime path (polling or webhook) in local and VM environments.
         - core role-specific flows (`Client` booking/cancel and `Master` schedule/cancel) are callable from real Telegram interactions.
@@ -119,3 +119,13 @@ Rules:
     - Dependencies: EPIC-003, EPIC-004, EPIC-005, EPIC-006, EPIC-010.
     - Local-run impact: compose runtime adds bot update processing while preserving existing API/smoke behavior and security gates.
     - Delivered: polling-mode aiogram runtime bootstrap, real Telegram client/master command handlers mapped to existing booking/schedule services, synchronized real Telegram local validation runbook, and epic closure checks with documented pip-audit environment deviation.
+
+- EPIC-012 — Telegram interactive button UX (replace slash-command primary flows) — Status: IN_PROGRESS
+    - Goal: move `Client` and `Master` primary journeys from `/` command syntax to interactive inline/reply keyboard flows with callback-driven navigation.
+    - Acceptance:
+        - Core client journey (master selection, service selection, slot choice, booking create/cancel) is fully executable via interactive buttons without requiring `/` commands.
+        - Core master journey (schedule view, day-off, lunch update, manual booking, booking cancellation with reason) is fully executable via interactive buttons without requiring `/` commands.
+        - Callback/state handling is idempotent and RBAC-safe; duplicate callbacks and stale menu actions return deterministic, localized (`ru`) responses.
+        - Local and VM smoke paths include at least one end-to-end interactive-button scenario for `Client` and `Master`.
+    - Dependencies: EPIC-011, EPIC-010, EPIC-009.
+    - Local-run impact: local runbook and smoke checks shift from command-centric Telegram validation to button-first scenarios while preserving existing compose runtime and CI security gates.
