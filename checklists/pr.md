@@ -4,6 +4,7 @@ Before opening PR:
 
 - `docker compose up -d` succeeds (local)
 - Smoke test passes (local)
+- No embedded inline smoke scripts are added to docs (`python - <<'PY'`, heredoc blocks for smoke)
 - Docs updated if behavior/interfaces/constraints changed
 - No debug leftovers
 - No secrets committed

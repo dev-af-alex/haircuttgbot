@@ -40,7 +40,7 @@ Legend:
   - Dependencies: T-003
   - PR group: group-02
 
-- T-005 (M) - Update local/VM smoke checks and delivery docs - Status: TODO
+- T-005 (M) - Update local/VM smoke checks and delivery docs - Status: DONE
   - Output: synchronized runbooks and smoke scripts validating bootstrap presence and master admin scenarios.
   - Acceptance checks:
     - `docs/04-delivery/local-dev.md` includes bootstrap config + add/remove validation steps.
@@ -48,7 +48,7 @@ Legend:
   - Dependencies: T-002, T-003
   - PR group: group-03
 
-- T-006 (S) - Regression and merge-gate hardening for epic closure - Status: TODO
+- T-006 (S) - Regression and merge-gate hardening for epic closure - Status: DONE
   - Output: focused regression tests and CI/readiness checklist for epic completion.
   - Acceptance checks:
     - Existing booking/schedule smoke paths remain green after master-admin changes.

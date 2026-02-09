@@ -12,3 +12,4 @@ When you change code, check if you must update:
 - docker-compose run steps → `docs/04-delivery/local-dev.md`
 - deploy steps → `docs/04-delivery/deploy-vm.md`
 - epics/tasks status → `docs/05-planning/epics.md` and epic workspace
+- smoke documentation format → keep smoke checks as commands/tests; do not add inline heredoc scripts into docs

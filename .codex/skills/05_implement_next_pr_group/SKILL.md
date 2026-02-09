@@ -28,6 +28,7 @@ Do:
 1) Implement only tasks in the selected PR group.
 2) Update docs per `checklists/doc-sync.md`.
 3) Ensure docker-compose local run + smoke test still pass (update `docs/04-delivery/local-dev.md` if needed).
+   - Do not add inline/heredoc smoke scripts to docs; use explicit commands and automated tests/scripts.
 4) Mark tasks DONE in group file and tasks.md.
 
 Output:

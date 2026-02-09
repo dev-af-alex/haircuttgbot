@@ -100,8 +100,10 @@ The bundle must not include real secret values.
 - Deployment docs stay aligned with local runtime assumptions from `docs/04-delivery/local-dev.md`.
 - Smoke validation after deploy must include:
   - `/health` and `/metrics` availability
+  - bootstrap config validation (`BOOTSTRAP_MASTER_TELEGRAM_ID`) and baseline seed presence
   - client booking success + one-active-booking rejection path
   - master schedule update path (day-off/lunch/manual booking)
+  - bootstrap master add/remove flow + non-bootstrap deny path
   - real Telegram button-first validation for both roles (`Client` and `Master`) in polling mode when token is configured
 - Rollback section must define clear failure triggers and deterministic command path.
 
@@ -187,14 +189,15 @@ Run on VM:
 
 ```bash
 curl -fsS http://127.0.0.1:8080/health
-curl -fsS http://127.0.0.1:8080/metrics | grep -E 'bot_api_service_health|bot_api_requests_total|bot_api_request_latency_seconds|bot_api_booking_outcomes_total|bot_api_abuse_outcomes_total'
+curl -fsS http://127.0.0.1:8080/metrics | grep -E 'bot_api_service_health|bot_api_requests_total|bot_api_request_latency_seconds|bot_api_booking_outcomes_total|bot_api_master_admin_outcomes_total|bot_api_abuse_outcomes_total'
 docker compose --env-file /opt/haircuttgbot/shared/.env logs bot-api --tail=50 | grep '"event": "startup"'
 ```
 
-Then run the canonical smoke path from `docs/04-delivery/local-dev.md` against VM services (seed + booking/cancellation/schedule scenario).
+Then run the canonical smoke path from `docs/04-delivery/local-dev.md` against VM services (seed + booking/cancellation/schedule + bootstrap master add/remove scenario).
 When Telegram token is configured, additionally validate button-first chat flows:
 - `Client`: new booking + cancel booking via buttons.
 - `Master`: schedule view + day-off + lunch update + manual booking + cancellation with reason via buttons.
+- `Bootstrap master`: `Управление мастерами` -> add one master -> remove same master.
 
 ### 6. Persist on reboot (systemd)
 
@@ -263,7 +266,7 @@ Run the same minimum checks as forward deploy:
 
 ```bash
 curl -fsS http://127.0.0.1:8080/health
-curl -fsS http://127.0.0.1:8080/metrics | grep -E 'bot_api_service_health|bot_api_requests_total|bot_api_request_latency_seconds|bot_api_booking_outcomes_total|bot_api_abuse_outcomes_total'
+curl -fsS http://127.0.0.1:8080/metrics | grep -E 'bot_api_service_health|bot_api_requests_total|bot_api_request_latency_seconds|bot_api_booking_outcomes_total|bot_api_master_admin_outcomes_total|bot_api_abuse_outcomes_total'
 ```
 
 Then execute canonical smoke checks from `docs/04-delivery/local-dev.md`.
@@ -287,7 +290,7 @@ Use this checklist after every production deployment and rollback recovery.
   - `migrate` finished with `Exited (0)`
   - `bot-api`, `postgres`, `redis` are healthy
 - `curl -fsS http://127.0.0.1:8080/health` returns `{"status":"ok","service":"bot-api"}`
-- `curl -fsS http://127.0.0.1:8080/metrics | grep -E 'bot_api_service_health|bot_api_requests_total|bot_api_request_latency_seconds|bot_api_booking_outcomes_total|bot_api_abuse_outcomes_total'` returns expected metric families
+- `curl -fsS http://127.0.0.1:8080/metrics | grep -E 'bot_api_service_health|bot_api_requests_total|bot_api_request_latency_seconds|bot_api_booking_outcomes_total|bot_api_master_admin_outcomes_total|bot_api_abuse_outcomes_total'` returns expected metric families
 - `docker compose --env-file /opt/haircuttgbot/shared/.env logs bot-api --tail=50 | grep '"event": "startup"'` returns startup structured log
 
 ### Functional smoke checks
@@ -300,6 +303,7 @@ Run canonical smoke steps from `docs/04-delivery/local-dev.md`:
 - master day-off update
 - master lunch update
 - master manual booking success + overlap rejection
+- bootstrap-master add/remove flow success + non-bootstrap deny
 
 ### Handoff notes for operations
 
