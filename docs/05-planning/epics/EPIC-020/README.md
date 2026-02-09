@@ -37,6 +37,12 @@ Remove backward-compatibility code paths that are unnecessary before first produ
 
 - Accepted: `docs/90-decisions/adr-0017-legacy-cleanup-boundary-and-owner-rename-policy.md`
 
+## Delivered
+
+- Удалены pre-deploy compatibility ветки для выбора слотов; baseline зафиксирован на service-aware контракте.
+- Добавлен owner-only rename мастера в Telegram admin flow с детерминированными `success/rejected/denied` outcome.
+- Добавлены регрессии и синхронизированы `local-dev`/`deploy-vm` smoke-проверки под rename и cleaned baseline.
+
 ## Epic Acceptance Target
 
 - Legacy compatibility scaffolding not needed pre-deploy is removed and replaced with one active baseline.
