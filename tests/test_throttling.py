@@ -82,10 +82,21 @@ def test_telegram_abuse_throttle_denies_burst_requests(monkeypatch, caplog) -> N
     caplog.set_level(logging.INFO, logger="bot_api")
 
     try:
-        payload = {"client_telegram_user_id": 2000001, "booking_id": 42}
-        first_status, _ = _asgi_request("POST", "/internal/telegram/client/booking-flow/cancel", payload)
-        second_status, _ = _asgi_request("POST", "/internal/telegram/client/booking-flow/cancel", payload)
-        third_status, third_body = _asgi_request("POST", "/internal/telegram/client/booking-flow/cancel", payload)
+        first_status, _ = _asgi_request(
+            "POST",
+            "/internal/telegram/client/booking-flow/cancel",
+            {"client_telegram_user_id": 2000001, "booking_id": 42},
+        )
+        second_status, _ = _asgi_request(
+            "POST",
+            "/internal/telegram/client/booking-flow/cancel",
+            {"client_telegram_user_id": 2000001, "booking_id": 43},
+        )
+        third_status, third_body = _asgi_request(
+            "POST",
+            "/internal/telegram/client/booking-flow/cancel",
+            {"client_telegram_user_id": 2000001, "booking_id": 44},
+        )
 
         assert first_status == 200
         assert second_status == 200

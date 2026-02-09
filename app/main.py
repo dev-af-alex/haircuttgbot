@@ -1,5 +1,6 @@
 import logging
 import os
+from json import loads
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time
 from json import JSONDecodeError
@@ -22,6 +23,7 @@ from app.booking import (
     list_service_options,
 )
 from app.db.session import get_engine
+from app.idempotency import CachedHttpResponse, TelegramIdempotencyStore
 from app.observability import (
     emit_event,
     instrument_endpoint,
@@ -52,6 +54,9 @@ app.state.telegram_throttle = TelegramCommandThrottle(
     limit=int(os.getenv("TELEGRAM_THROTTLE_LIMIT", "8")),
     window_seconds=int(os.getenv("TELEGRAM_THROTTLE_WINDOW_SECONDS", "10")),
 )
+app.state.telegram_idempotency = TelegramIdempotencyStore(
+    window_seconds=int(os.getenv("TELEGRAM_IDEMPOTENCY_WINDOW_SECONDS", "120")),
+)
 
 _THROTTLED_PATH_PREFIX = "/internal/telegram/"
 _THROTTLED_METHODS = {"POST"}
@@ -60,6 +65,14 @@ _THROTTLED_USER_KEYS = (
     "master_telegram_user_id",
     "telegram_user_id",
 )
+_IDEMPOTENT_OUTCOME_BY_PATH = {
+    "/internal/telegram/client/booking-flow/confirm": "created",
+    "/internal/telegram/client/booking-flow/cancel": "cancelled",
+    "/internal/telegram/master/booking-flow/cancel": "cancelled",
+    "/internal/telegram/master/schedule/day-off": "applied",
+    "/internal/telegram/master/schedule/lunch": "applied",
+    "/internal/telegram/master/schedule/manual-booking": "applied",
+}
 
 
 def _extract_telegram_user_id(payload: Any) -> int | None:
@@ -73,13 +86,15 @@ def _extract_telegram_user_id(payload: Any) -> int | None:
 
 
 @app.middleware("http")
-async def telegram_abuse_throttle(request: Request, call_next):  # type: ignore[no-untyped-def]
+async def telegram_command_guards(request: Request, call_next):  # type: ignore[no-untyped-def]
     if request.method not in _THROTTLED_METHODS or not request.url.path.startswith(_THROTTLED_PATH_PREFIX):
         return await call_next(request)
 
     telegram_user_id: int | None = None
+    payload_dict: dict[str, Any] | None = None
     try:
         payload = await request.json()
+        payload_dict = payload if isinstance(payload, dict) else None
         telegram_user_id = _extract_telegram_user_id(payload)
     except (JSONDecodeError, UnicodeDecodeError):
         payload = None
@@ -87,6 +102,29 @@ async def telegram_abuse_throttle(request: Request, call_next):  # type: ignore[
 
     if telegram_user_id is None:
         return await call_next(request)
+
+    idempotent_outcome_key = _IDEMPOTENT_OUTCOME_BY_PATH.get(request.url.path)
+    idempotency_key: str | None = None
+    if idempotent_outcome_key is not None and payload_dict is not None:
+        idempotency_key = app.state.telegram_idempotency.make_key(
+            path=request.url.path,
+            telegram_user_id=telegram_user_id,
+            payload=payload_dict,
+        )
+        cached = app.state.telegram_idempotency.get(idempotency_key)
+        if cached is not None:
+            emit_event(
+                "telegram_idempotency_replay",
+                telegram_user_id=telegram_user_id,
+                path=request.url.path,
+                idempotency_window_seconds=app.state.telegram_idempotency.window_seconds,
+            )
+            return Response(
+                content=cached.body,
+                status_code=cached.status_code,
+                media_type=cached.media_type,
+                headers={"X-Idempotency-Replayed": "1"},
+            )
 
     decision = app.state.telegram_throttle.check(telegram_user_id)
     observe_abuse_outcome(request.url.path, allowed=decision.allowed)
@@ -110,7 +148,39 @@ async def telegram_abuse_throttle(request: Request, call_next):  # type: ignore[
             },
         )
 
-    return await call_next(request)
+    response = await call_next(request)
+
+    if idempotency_key is None or idempotent_outcome_key is None:
+        return response
+
+    body = b""
+    async for chunk in response.body_iterator:
+        body += chunk
+
+    media_type = response.media_type or "application/json"
+    replay_safe = Response(
+        content=body,
+        status_code=response.status_code,
+        media_type=media_type,
+        headers=dict(response.headers),
+    )
+
+    if response.status_code == 200:
+        try:
+            payload = loads(body.decode("utf-8"))
+        except Exception:
+            payload = None
+        if isinstance(payload, dict) and payload.get(idempotent_outcome_key) is True:
+            app.state.telegram_idempotency.put(
+                idempotency_key,
+                CachedHttpResponse(
+                    status_code=response.status_code,
+                    body=body,
+                    media_type=media_type,
+                ),
+            )
+
+    return replay_safe
 
 
 class ResolveRoleRequest(BaseModel):

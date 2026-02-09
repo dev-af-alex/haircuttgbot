@@ -54,17 +54,19 @@ A developer can run:
 5. Validate seed result (at least 2 masters):
    `docker compose exec -T postgres psql -U haircuttgbot -d haircuttgbot -c "SELECT count(*) FROM masters;"`
 6. Confirm startup structured log exists:
-   `docker compose logs bot-api --tail=50 | grep '"event": "startup"'`
+   `docker compose logs bot-api --tail=200 | grep '"event": "startup"'`
 7. Validate booking/cancellation flow + master schedule updates (day-off/lunch/manual booking) + abuse-throttle rejection:
    `docker compose exec -T bot-api python - <<'PY'
 import json
+import time
 import urllib.error
 import urllib.request
 from sqlalchemy import create_engine, text
 from app.db.session import get_database_url
 
-client_tg = 2001001
-throttle_tg = 2999001
+unique_suffix = int(time.time()) % 100000
+client_tg = 2000000 + unique_suffix
+throttle_tg = 3000000 + unique_suffix
 slot_1 = "2026-02-13T10:00:00+00:00"
 slot_2 = "2026-02-13T12:00:00+00:00"
 
@@ -94,6 +96,16 @@ with engine.begin() as conn:
             "DELETE FROM bookings WHERE client_user_id = (SELECT id FROM users WHERE telegram_user_id = :telegram_user_id)"
         ),
         {"telegram_user_id": throttle_tg},
+    )
+    conn.execute(
+        text(
+            """
+            DELETE FROM bookings
+            WHERE master_id = 1
+              AND slot_start >= '2026-02-13T00:00:00+00:00'
+              AND slot_start < '2026-02-14T00:00:00+00:00'
+            """
+        )
     )
     conn.execute(
         text(

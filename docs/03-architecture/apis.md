@@ -5,7 +5,9 @@
 - REST/GraphQL/gRPC: REST (FastAPI HTTP endpoints).
 - Versioning: internal baseline; public API versioning starts in later epics.
 - Pagination: not applicable in current baseline.
-- Idempotency: `GET /health` is idempotent and side-effect free.
+- Idempotency:
+  - `GET /health` is idempotent and side-effect free.
+  - Telegram write-side commands use bounded replay-idempotency guard (see endpoint notes).
 
 ## 2) Error model
 
@@ -103,6 +105,9 @@
     `{"client_telegram_user_id":2000001,"master_id":1,"service_type":"haircut","slot_start":"2026-02-12T10:00:00+00:00"}`
   - Response `200` (success):
     `{"created":true,"booking_id":42,"message":"Запись успешно создана.","notifications":[{"recipient_telegram_user_id":2000001,"message":"Запись подтверждена."},{"recipient_telegram_user_id":1000001,"message":"Новая запись клиента добавлена в расписание."}]}`
+  - Idempotency notes:
+    - Duplicate delivery in replay window returns cached success payload.
+    - Replay response includes header `X-Idempotency-Replayed: 1`.
 
 - `POST /internal/telegram/client/booking-flow/cancel`
   - Purpose: cancel client-owned active future booking with participant notifications.
@@ -114,6 +119,9 @@
     `{"cancelled":false,"booking_id":null,"message":"Эту запись нельзя отменить.","notifications":[]}`
   - Response `429` (abuse throttled):
     `{"detail":"Слишком много запросов. Повторите позже.","code":"throttled","retry_after_seconds":5}`
+  - Idempotency notes:
+    - Successful cancellation responses are replayed for duplicate deliveries in replay window.
+    - Replay response includes header `X-Idempotency-Replayed: 1`.
 
 - `POST /internal/telegram/master/booking-flow/cancel`
   - Purpose: cancel master-owned active future booking with mandatory reason and participant notifications.
@@ -125,6 +133,9 @@
     `{"cancelled":false,"booking_id":null,"message":"Укажите причину отмены.","notifications":[]}`
   - Response `429` (abuse throttled):
     `{"detail":"Слишком много запросов. Повторите позже.","code":"throttled","retry_after_seconds":5}`
+  - Idempotency notes:
+    - Successful cancellation responses are replayed for duplicate deliveries in replay window.
+    - Replay response includes header `X-Idempotency-Replayed: 1`.
   - Behavior notes:
     - Rejects cancellation if reason is empty/whitespace.
     - Rejects cancellation for bookings outside master ownership.
@@ -147,6 +158,9 @@
     `{"applied":false,"created":false,"block_id":null,"message":"Выходной интервал пересекается с существующим выходным."}`
   - Response `429` (abuse throttled):
     `{"detail":"Слишком много запросов. Повторите позже.","code":"throttled","retry_after_seconds":5}`
+  - Idempotency notes:
+    - Successful `applied=true` responses are replayed for duplicate deliveries in replay window.
+    - Replay response includes header `X-Idempotency-Replayed: 1`.
   - Behavior notes:
     - Rejects invalid interval (`start_at >= end_at`).
     - Rejects overlapping day-off intervals for the same master.
@@ -162,6 +176,9 @@
     `{"applied":false,"message":"Длительность обеда должна быть 60 минут."}`
   - Response `429` (abuse throttled):
     `{"detail":"Слишком много запросов. Повторите позже.","code":"throttled","retry_after_seconds":5}`
+  - Idempotency notes:
+    - Successful `applied=true` responses are replayed for duplicate deliveries in replay window.
+    - Replay response includes header `X-Idempotency-Replayed: 1`.
   - Behavior notes:
     - Rejects invalid interval (`lunch_start >= lunch_end`).
     - Rejects non-60-minute duration and intervals outside master work window.
@@ -177,6 +194,9 @@
     `{"applied":false,"booking_id":null,"message":"Слот для ручной записи недоступен."}`
   - Response `429` (abuse throttled):
     `{"detail":"Слишком много запросов. Повторите позже.","code":"throttled","retry_after_seconds":5}`
+  - Idempotency notes:
+    - Successful `applied=true` responses are replayed for duplicate deliveries in replay window.
+    - Replay response includes header `X-Idempotency-Replayed: 1`.
   - Behavior notes:
     - Applies ownership check to target master profile.
     - Rejects overlap with active bookings, day-off blocks, and lunch interval.
@@ -199,6 +219,7 @@
   - `schedule_lunch_update`
   - `schedule_manual_booking`
   - `abuse_throttle_deny`
+  - `telegram_idempotency_replay`
 - Redaction policy:
   - Keys containing `token`, `secret`, `password`, `authorization`, `api_key`, `database_url` are replaced with `[REDACTED]`.
   - Raw `TELEGRAM_BOT_TOKEN` value is masked from any string field if present.
