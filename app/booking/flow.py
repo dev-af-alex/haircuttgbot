@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
@@ -190,7 +190,12 @@ class TelegramBookingFlowService:
         if not any(master["id"] == master_id for master in self._repository.list_active_masters()):
             return {"message": RU_BOOKING_MESSAGES["master_not_found"], "slots": []}
 
-        slots = self._availability.list_slots(master_id=master_id, on_date=on_date, service_type=service_type)
+        slots = self._availability.list_slots(
+            master_id=master_id,
+            on_date=on_date,
+            service_type=service_type,
+            now=datetime.now(UTC),
+        )
         return {
             "message": RU_BOOKING_MESSAGES["choose_slot"],
             "slots": [

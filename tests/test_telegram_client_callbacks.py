@@ -278,6 +278,35 @@ def test_client_service_selection_controls_slot_granularity() -> None:
     assert all(not token.endswith("1000") for token in combo_tokens)
 
 
+def test_client_confirm_rejects_stale_same_day_slot_token() -> None:
+    router = TelegramCallbackRouter(_setup_flow_schema())
+    router.seed_root_menu(telegram_user_id=2000001)
+
+    result = router.handle(telegram_user_id=2000001, data="hb1|cm")
+    assert "Меню клиента" in result.text
+
+    result = router.handle(telegram_user_id=2000001, data="hb1|cb")
+    master_callbacks = _callbacks_for_action(result.reply_markup, "csm")
+    assert master_callbacks
+    result = router.handle(telegram_user_id=2000001, data=master_callbacks[0])
+
+    service_callbacks = _callbacks_for_action(result.reply_markup, "css")
+    assert service_callbacks
+    haircut_callback = [item for item in service_callbacks if item.endswith("|haircut")]
+    assert haircut_callback
+    result = router.handle(telegram_user_id=2000001, data=haircut_callback[0])
+    date_callbacks = _callbacks_for_action(result.reply_markup, "csd")
+    assert date_callbacks
+    result = router.handle(telegram_user_id=2000001, data=date_callbacks[0])
+    assert _callbacks_for_action(result.reply_markup, "csl")
+
+    result = router.handle(telegram_user_id=2000001, data="hb1|csl|202602091000")
+    assert "Подтвердите запись" in result.text
+
+    result = router.handle(telegram_user_id=2000001, data="hb1|ccf")
+    assert "уже недоступен" in result.text.lower()
+
+
 def test_client_interactive_keyboards_keep_mobile_friendly_rows() -> None:
     router = TelegramCallbackRouter(_setup_flow_schema())
     router.seed_root_menu(telegram_user_id=2000001)

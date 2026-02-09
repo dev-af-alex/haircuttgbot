@@ -100,8 +100,12 @@ Use this sequence when validating aiogram runtime against a real Telegram chat.
      - `Отмена записи` (reason selection is mandatory).
    - verify readable master texts:
      - `Просмотр расписания` output uses `DD.MM.YYYY HH:MM` slot labels and `HH:MM-HH:MM` lunch interval;
+     - `Просмотр расписания` first asks for target date, then returns schedule for selected date;
      - `Выходной день` and `Обед` confirmations include readable interval/date details;
      - `Ручная запись` and `Отмена записи` confirmations include readable `Слот` details and reason context.
+   - validate EPIC-016 guardrails:
+     - if current time is `15:00`, in client `Новая запись` same-day slots earlier than `15:30` are not offered;
+     - for an occupied date, `Выходной день` returns rejection text about existing active bookings.
 9. Optional bootstrap-master administration validation (same master account as `BOOTSTRAP_MASTER_TELEGRAM_ID`):
    - in `Мастер` menu open `Управление мастерами`;
    - run `Добавить мастера` for one client user and check success message;

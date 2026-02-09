@@ -162,3 +162,34 @@ Rules:
     - Dependencies: EPIC-012, EPIC-013, EPIC-014.
     - Local-run impact: smoke and manual QA checklists add UI/format assertions in addition to API correctness.
     - Delivered: Group 01 finalized ADR-0012 + shared `ru` formatter and keyboard layout helpers; Group 02 completed client readable booking/cancel texts and client mobile row constraints; Group 03 completed master/admin readable messages, master/admin mobile row constraints, expanded callback regressions, and synchronized local/VM Telegram validation runbooks.
+
+- EPIC-016 — Booking-time guardrails and master calendar constraints — Status: DONE
+    - Goal: enforce real-time booking validity and calendar consistency rules for client booking and master day-off operations.
+    - Acceptance:
+        - Client cannot confirm booking into already-passed time windows; same-day availability starts from the nearest allowed future boundary (for example, at `15:00` only slots from `15:30+` are offered).
+        - Master cannot set a day off for a date that already has at least one active booking; bot returns explicit localized rejection.
+        - Master can pick an arbitrary target date to view schedule (not only current day), and output remains readable/localized.
+        - Regression and smoke coverage include same-day past-slot rejection, day-off rejection on occupied date, and schedule-view-by-date success path.
+    - Dependencies: EPIC-006, EPIC-012, EPIC-014, EPIC-015.
+    - Local-run impact: local smoke expands with current-time-sensitive checks and master calendar-constraint scenarios.
+    - Delivered: Group 01 accepted ADR-0013 + shared same-day boundary helper + day-off conflict primitive; Group 02 integrated stale-slot rejection, occupied-date day-off denial, and schedule-by-date callback flow; Group 03 expanded regression coverage and synchronized local/VM smoke validation steps.
+
+- EPIC-017 — Role-first entry UX and master identity texts — Status: TODO
+    - Goal: simplify `/start` and booking UX by removing intermediate main menu and using human-readable master identity across client flows.
+    - Acceptance:
+        - `Главное меню` section is removed from user-visible navigation; role-resolved users land directly in `Client` or `Master` panel on bot start.
+        - `/start` sends barbershop greeting text instead of command-list style response.
+        - Client master-selection and booking-confirmation texts show master display name (not `Master ID`) consistently.
+        - Regression and smoke coverage validate direct role landing, greeting message contract, and master-name rendering in selection/confirmation flows.
+    - Dependencies: EPIC-012, EPIC-013, EPIC-015.
+    - Local-run impact: Telegram validation steps in local/VM runbooks shift to role-direct start behavior and updated text assertions.
+
+- EPIC-018 — Manual master assignment by Telegram nickname (`@...`) — Status: TODO
+    - Goal: change bootstrap-master administration flow so master assignment is performed by explicit nickname input, not by selecting existing bot users.
+    - Acceptance:
+        - In `Управление мастерами` add-master flow accepts only manual nickname input starting with `@` and rejects invalid formats.
+        - System resolves/stores nickname-based assignment with deterministic behavior when nickname is unknown or ambiguous, with localized operator feedback.
+        - Existing add/remove master RBAC and auditability guarantees stay intact.
+        - Regression and smoke coverage include success and validation-failure scenarios for nickname-based assignment.
+    - Dependencies: EPIC-013, EPIC-017.
+    - Local-run impact: local/VM smoke updates bootstrap-master add flow to nickname-first input path and validation checks.

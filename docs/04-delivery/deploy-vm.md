@@ -197,7 +197,9 @@ Then run the canonical smoke path from `docs/04-delivery/local-dev.md` against V
 When Telegram token is configured, additionally validate button-first chat flows:
 - `Client`: new booking + cancel booking via buttons.
 - `Client` mixed-duration check: `Стрижка` shows 30-minute slot range labels (for example `10:00-10:30`), `Стрижка + борода` remains hourly (`10:00-11:00`).
-- `Master`: schedule view + day-off + lunch update + manual booking + cancellation with reason via buttons; outputs should use readable labels (`DD.MM.YYYY HH:MM`, `HH:MM-HH:MM`).
+- `Client` same-day guardrail: if now is `15:00`, slots earlier than `15:30` are not available/confirmable.
+- `Master`: schedule view + day-off + lunch update + manual booking + cancellation with reason via buttons; schedule view first requires date selection and outputs should use readable labels (`DD.MM.YYYY HH:MM`, `HH:MM-HH:MM`).
+- `Master` day-off guardrail: on date with active bookings, day-off action returns deterministic rejection about existing bookings.
 - `Bootstrap master`: `Управление мастерами` -> add one master -> remove same master.
 
 ### 6. Persist on reboot (systemd)

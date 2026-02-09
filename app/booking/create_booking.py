@@ -7,9 +7,10 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from app.booking.contracts import BOOKING_STATUS_ACTIVE
+from app.booking.guardrails import is_slot_start_allowed
 from app.booking.intervals import sql_overlap_predicate
 from app.booking.messages import RU_BOOKING_MESSAGES
-from app.booking.service_options import resolve_service_duration_minutes
+from app.booking.service_options import DEFAULT_SLOT_STEP_MINUTES, resolve_service_duration_minutes
 
 
 @dataclass(frozen=True)
@@ -84,6 +85,13 @@ class BookingService:
                 second=lunch_end.second,
                 microsecond=0,
             )
+
+            if not is_slot_start_allowed(
+                slot_start=slot_start_utc,
+                now=now_utc,
+                slot_step_minutes=DEFAULT_SLOT_STEP_MINUTES,
+            ):
+                return BookingCreateResult(created=False, message=RU_BOOKING_MESSAGES["slot_already_passed"])
 
             if slot_start_utc < day_work_start or slot_end_utc > day_work_end:
                 return BookingCreateResult(created=False, message=RU_BOOKING_MESSAGES["slot_not_available"])

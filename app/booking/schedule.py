@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
 
 from sqlalchemy import text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 
 from app.booking.contracts import BOOKING_STATUS_ACTIVE
 from app.booking.intervals import sql_overlap_predicate
@@ -114,6 +114,19 @@ class MasterScheduleService:
             )
 
         with self._engine.begin() as conn:
+            if self._has_active_booking_overlap(
+                conn=conn,
+                master_id=context.master_id,
+                start_at=start_at,
+                end_at=end_at,
+            ):
+                return MasterDayOffResult(
+                    applied=False,
+                    created=False,
+                    block_id=None,
+                    message=RU_BOOKING_MESSAGES["day_off_has_bookings"],
+                )
+
             overlapping = conn.execute(
                 text(
                     """
@@ -207,6 +220,41 @@ class MasterScheduleService:
                 block_id=int(created_id),
                 message=RU_BOOKING_MESSAGES["day_off_created"],
             )
+
+    def _has_active_booking_overlap(
+        self,
+        *,
+        conn: Connection,
+        master_id: int,
+        start_at: datetime,
+        end_at: datetime,
+    ) -> bool:
+        row = conn.execute(
+            text(
+                """
+                SELECT 1
+                FROM bookings
+                WHERE master_id = :master_id
+                  AND status = :active_status
+                  AND """
+                + sql_overlap_predicate(
+                    start_column="slot_start",
+                    end_column="slot_end",
+                    start_param="start_at",
+                    end_param="end_at",
+                )
+                + """
+                LIMIT 1
+                """
+            ),
+            {
+                "master_id": master_id,
+                "active_status": BOOKING_STATUS_ACTIVE,
+                "start_at": start_at,
+                "end_at": end_at,
+            },
+        ).first()
+        return row is not None
 
     def update_lunch_break(
         self,

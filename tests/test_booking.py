@@ -379,6 +379,23 @@ def test_availability_supports_duration_aware_service_slots() -> None:
     assert invalid_slots == []
 
 
+def test_availability_same_day_applies_30_minute_lead_time_rounding() -> None:
+    engine = _setup_availability_schema()
+    service = AvailabilityService(engine)
+
+    slots = service.list_slots(
+        master_id=1,
+        on_date=date(2026, 2, 9),
+        service_type="haircut",
+        now=datetime(2026, 2, 9, 15, 0, tzinfo=UTC),
+    )
+    starts = [slot.start_at.strftime("%H:%M") for slot in slots]
+
+    assert starts
+    assert starts[0] == "15:30"
+    assert "15:00" not in starts
+
+
 def test_create_booking_success() -> None:
     engine = _setup_availability_schema()
 
@@ -470,6 +487,22 @@ def test_create_booking_rejects_second_future_booking_for_client() -> None:
 
     assert result.created is False
     assert "активная будущая" in result.message
+
+
+def test_create_booking_rejects_same_day_slot_inside_lead_window() -> None:
+    engine = _setup_availability_schema()
+    service = BookingService(engine)
+
+    result = service.create_booking(
+        master_id=1,
+        client_user_id=5001,
+        service_type="haircut",
+        slot_start=datetime(2026, 2, 11, 15, 0, tzinfo=UTC),
+        now=datetime(2026, 2, 11, 15, 0, tzinfo=UTC),
+    )
+
+    assert result.created is False
+    assert "уже недоступен" in result.message.lower()
 
 
 def test_create_booking_respects_variable_service_duration_conflicts() -> None:
@@ -785,6 +818,36 @@ def test_master_day_off_rejects_invalid_conflict_and_non_owner_update() -> None:
     )
     assert non_owner_update.applied is False
     assert "не найден" in non_owner_update.message.lower()
+
+
+def test_master_day_off_rejects_when_active_bookings_exist_on_target_interval() -> None:
+    engine = _setup_telegram_flow_schema()
+    service = MasterScheduleService(engine)
+
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO bookings (master_id, client_user_id, service_type, status, slot_start, slot_end)
+                VALUES (1, 20, 'haircut', 'active', :slot_start, :slot_end)
+                """
+            ),
+            {
+                "slot_start": datetime(2026, 2, 18, 10, 0, tzinfo=UTC),
+                "slot_end": datetime(2026, 2, 18, 10, 30, tzinfo=UTC),
+            },
+        )
+
+    day_off = service.upsert_day_off(
+        master_telegram_user_id=1000001,
+        command=MasterDayOffCommand(
+            start_at=datetime(2026, 2, 18, 10, 0, tzinfo=UTC),
+            end_at=datetime(2026, 2, 18, 21, 0, tzinfo=UTC),
+        ),
+    )
+
+    assert day_off.applied is False
+    assert "уже есть активные записи" in day_off.message.lower()
 
 
 def test_master_lunch_update_success_and_validation() -> None:

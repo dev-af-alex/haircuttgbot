@@ -163,7 +163,11 @@ def test_master_interactive_schedule_dayoff_lunch_manual_flow() -> None:
     assert "Меню мастера" in result.text
 
     result = router.handle(telegram_user_id=1000001, data="hb1|msv")
-    assert "Ближайшее расписание мастера" in result.text
+    assert "Выберите дату для просмотра расписания" in result.text
+    schedule_date_callbacks = _callbacks_for_action(result.reply_markup, "msv")
+    assert len(schedule_date_callbacks) >= 2
+    result = router.handle(telegram_user_id=1000001, data=schedule_date_callbacks[1])
+    assert "Расписание на" in result.text
     assert re.search(r"Обед: \d{2}:\d{2} - \d{2}:\d{2}", result.text)
 
     result = router.handle(telegram_user_id=1000001, data="hb1|msd")
@@ -204,6 +208,29 @@ def test_master_interactive_schedule_dayoff_lunch_manual_flow() -> None:
     assert "Ручная запись создана" in result.text
     assert "Слот:" in result.text
     assert re.search(r"\d{2}:\d{2}-\d{2}:\d{2}", result.text)
+
+
+def test_master_day_off_rejects_occupied_date() -> None:
+    engine = _setup_flow_schema()
+    router = TelegramCallbackRouter(engine)
+    router.seed_root_menu(telegram_user_id=1000001)
+
+    _create_client_booking(
+        engine,
+        slot_start=datetime(2026, 2, 10, 10, 0, tzinfo=UTC),
+    )
+
+    result = router.handle(telegram_user_id=1000001, data="hb1|mm")
+    assert "Меню мастера" in result.text
+
+    result = router.handle(telegram_user_id=1000001, data="hb1|msd")
+    day_off_callbacks = _callbacks_for_action(result.reply_markup, "msu")
+    assert day_off_callbacks
+
+    target = [item for item in day_off_callbacks if item.endswith("|20260210")]
+    assert target
+    result = router.handle(telegram_user_id=1000001, data=target[0])
+    assert "уже есть активные записи" in result.text.lower()
 
 
 def test_master_interactive_cancel_requires_reason_and_sends_notifications() -> None:

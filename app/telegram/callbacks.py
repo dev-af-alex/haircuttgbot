@@ -137,6 +137,7 @@ _MENU_CLIENT_CONFIRM = "client_confirm"
 _MENU_CLIENT_CANCEL_SELECT = "client_cancel_select"
 _MENU_CLIENT_CANCEL_CONFIRM = "client_cancel_confirm"
 
+_MENU_MASTER_SCHEDULE_DATE_SELECT = "master_schedule_date_select"
 _MENU_MASTER_DAY_OFF_SELECT = "master_day_off_select"
 _MENU_MASTER_LUNCH_SELECT = "master_lunch_select"
 _MENU_MASTER_MANUAL_SERVICE_SELECT = "master_manual_service_select"
@@ -161,6 +162,7 @@ _MENU_ALLOWED_ACTIONS = {
     _MENU_CLIENT_CONFIRM: {"hm", "bk", "ccf"},
     _MENU_CLIENT_CANCEL_SELECT: {"hm", "bk", "cci"},
     _MENU_CLIENT_CANCEL_CONFIRM: {"hm", "bk", "ccn"},
+    _MENU_MASTER_SCHEDULE_DATE_SELECT: {"hm", "mr", "msv"},
     _MENU_MASTER_DAY_OFF_SELECT: {"hm", "mr", "msu"},
     _MENU_MASTER_LUNCH_SELECT: {"hm", "mr", "mls"},
     _MENU_MASTER_MANUAL_SERVICE_SELECT: {"hm", "mr", "mbs"},
@@ -383,7 +385,7 @@ class TelegramCallbackRouter:
             "cc": lambda user_id, _: self._handle_client_cancel_list(telegram_user_id=user_id),
             "cci": self._handle_client_cancel_prepare,
             "ccn": self._handle_client_cancel_confirm,
-            "msv": lambda user_id, _: self._handle_master_view_schedule(telegram_user_id=user_id),
+            "msv": self._handle_master_view_schedule,
             "msd": lambda user_id, _: self._handle_master_day_off_start(telegram_user_id=user_id),
             "msu": self._handle_master_day_off_apply,
             "mlm": lambda user_id, _: self._handle_master_lunch_start(telegram_user_id=user_id),
@@ -622,15 +624,31 @@ class TelegramCallbackRouter:
             notifications=_coerce_notifications(response.get("notifications")),
         )
 
-    def _handle_master_view_schedule(self, *, telegram_user_id: int) -> CallbackHandleResult:
-        context = self._schedule.resolve_context(master_telegram_user_id=telegram_user_id)
-        if context is None:
+    def _handle_master_view_schedule(self, telegram_user_id: int, context: str | None) -> CallbackHandleResult:
+        master_ctx = self._schedule.resolve_context(master_telegram_user_id=telegram_user_id)
+        if master_ctx is None:
             return CallbackHandleResult(
                 text="Мастер не найден.",
                 reply_markup=build_menu_markup(_MENU_MASTER),
             )
 
-        now_utc = datetime.now(UTC)
+        if context is None:
+            self._state.set_menu(telegram_user_id, _MENU_MASTER_SCHEDULE_DATE_SELECT)
+            return CallbackHandleResult(
+                text="Выберите дату для просмотра расписания.",
+                reply_markup=build_client_date_markup(action="msv", action_back="mr", days_ahead=10),
+            )
+
+        if not _DATE_TOKEN_PATTERN.match(context):
+            return self._invalid_response()
+
+        try:
+            on_date = _parse_date_token(context)
+        except ValueError:
+            return self._invalid_response()
+
+        day_start = datetime.combine(on_date, dt_time.min, tzinfo=UTC)
+        day_end = day_start + timedelta(days=1)
         with self._engine.connect() as conn:
             master = conn.execute(
                 text(
@@ -640,7 +658,7 @@ class TelegramCallbackRouter:
                     WHERE id = :master_id
                     """
                 ),
-                {"master_id": context.master_id},
+                {"master_id": master_ctx.master_id},
             ).mappings().first()
             rows = conn.execute(
                 text(
@@ -649,15 +667,15 @@ class TelegramCallbackRouter:
                     FROM bookings
                     WHERE master_id = :master_id
                       AND status = 'active'
-                      AND slot_start >= :now_utc
+                      AND slot_start >= :day_start
+                      AND slot_start < :day_end
                     ORDER BY slot_start
-                    LIMIT 5
                     """
                 ),
-                {"master_id": context.master_id, "now_utc": now_utc},
+                {"master_id": master_ctx.master_id, "day_start": day_start, "day_end": day_end},
             ).mappings()
 
-        lines = ["Ближайшее расписание мастера:"]
+        lines = [f"Расписание на {format_ru_date(on_date)}:"]
         if master is not None:
             lines.append(f"- Профиль: {master['display_name']}")
             lines.append(
@@ -674,7 +692,7 @@ class TelegramCallbackRouter:
             )
             has_rows = True
         if not has_rows:
-            lines.append("- Активных будущих записей нет.")
+            lines.append("- Активных записей на выбранную дату нет.")
 
         self._state.set_menu(telegram_user_id, _MENU_MASTER)
         return CallbackHandleResult(

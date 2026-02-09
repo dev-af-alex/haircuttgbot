@@ -6,6 +6,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
+from app.booking.guardrails import normalize_utc, same_day_min_slot_start
 from app.booking.intervals import is_interval_blocked
 from app.booking.service_options import (
     DEFAULT_SLOT_DURATION_MINUTES,
@@ -108,9 +109,16 @@ class AvailabilityService:
             slot_cutoff = datetime.combine(on_date, work_end, tzinfo=UTC)
 
             now_utc = _normalize_now(now)
+            same_day_min_start = None
+            if now_utc is not None:
+                same_day_min_start = same_day_min_slot_start(
+                    on_date=on_date,
+                    now=now_utc,
+                    slot_step_minutes=slot_step.seconds // 60,
+                )
             while slot_start + slot_duration <= slot_cutoff:
                 slot_end = slot_start + slot_duration
-                if now_utc is not None and slot_start.date() == now_utc.date() and slot_start < now_utc:
+                if same_day_min_start is not None and slot_start < same_day_min_start:
                     slot_start = slot_start + slot_step
                     continue
 
@@ -125,9 +133,7 @@ class AvailabilityService:
 def _normalize_now(now: datetime | None) -> datetime | None:
     if now is None:
         return None
-    if now.tzinfo is None:
-        return now.replace(tzinfo=UTC)
-    return now.astimezone(UTC)
+    return normalize_utc(now)
 
 def _as_time(value: time | str) -> time:
     if isinstance(value, time):

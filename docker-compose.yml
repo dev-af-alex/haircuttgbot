@@ -19,6 +19,8 @@ services:
 
   redis:
     image: redis:7-alpine
+    volumes:
+      - redis-data:/data
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
@@ -76,6 +78,7 @@ services:
 
 volumes:
   postgres-data:
+  redis-data:
 
 networks:
   app-net:
