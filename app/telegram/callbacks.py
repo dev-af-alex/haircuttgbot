@@ -23,9 +23,19 @@ from app.booking import (
     SERVICE_OPTION_LABELS_RU,
     TelegramBookingFlowService,
     list_service_options,
+    resolve_service_duration_minutes,
 )
 from app.db.seed import BOOTSTRAP_MASTER_TELEGRAM_ID_ENV, resolve_bootstrap_master_telegram_id
 from app.observability import emit_event, observe_master_admin_outcome
+from app.telegram.presentation import (
+    MOBILE_DATE_SLOT_MAX_BUTTONS_PER_ROW,
+    MOBILE_MENU_MAX_BUTTONS_PER_ROW,
+    chunk_inline_buttons,
+    format_ru_date,
+    format_ru_datetime,
+    format_ru_slot_range,
+    format_ru_time,
+)
 
 CALLBACK_DATA_MAX_LENGTH = 64
 CALLBACK_PREFIX = "hb1"
@@ -502,7 +512,7 @@ class TelegramCallbackRouter:
             "Подтвердите запись:\n"
             f"- Мастер ID: {master_id}\n"
             f"- Услуга: {SERVICE_OPTION_LABELS_RU.get(service_type, service_type)}\n"
-            f"- Слот: {slot_start.isoformat()}"
+            f"- Слот: {format_ru_datetime(slot_start)}"
         )
         return CallbackHandleResult(
             text=summary,
@@ -528,9 +538,17 @@ class TelegramCallbackRouter:
             service_type=service_type,
             slot_start=slot_start,
         )
+        result_message = str(response.get("message", ""))
+        if response.get("created") is True:
+            duration_minutes = self._resolve_service_duration_minutes(service_type=service_type)
+            result_message = (
+                f"{result_message}\n"
+                f"Слот: {format_ru_slot_range(slot_start, duration_minutes=duration_minutes)} "
+                f"({format_ru_datetime(slot_start)})"
+            ).strip()
         self._state.set_menu(telegram_user_id, _MENU_CLIENT, reset_context=True)
         return CallbackHandleResult(
-            text=str(response.get("message", "")),
+            text=result_message,
             reply_markup=build_menu_markup(_MENU_CLIENT),
             notifications=_coerce_notifications(response.get("notifications")),
         )
@@ -558,15 +576,31 @@ class TelegramCallbackRouter:
         except ValueError:
             return self._invalid_response()
 
+        booking = self._find_client_booking_for_user(telegram_user_id=telegram_user_id, booking_id=booking_id)
         self._state.set_context_value(telegram_user_id, "cancel_booking_id", str(booking_id))
+        if booking is not None:
+            self._state.set_context_value(
+                telegram_user_id,
+                "cancel_slot_datetime",
+                format_ru_datetime(booking["slot_start"]),
+            )
         self._state.set_menu(telegram_user_id, _MENU_CLIENT_CANCEL_CONFIRM)
+        summary = f"Подтвердите отмену записи #{booking_id}."
+        if booking is not None:
+            service_label = SERVICE_OPTION_LABELS_RU.get(booking["service_type"], booking["service_type"])
+            summary = (
+                f"{summary}\n"
+                f"Слот: {format_ru_datetime(booking['slot_start'])}\n"
+                f"Услуга: {service_label}"
+            )
         return CallbackHandleResult(
-            text=f"Подтвердите отмену записи #{booking_id}.",
+            text=summary,
             reply_markup=build_client_cancel_confirm_markup(booking_id=booking_id),
         )
 
     def _handle_client_cancel_confirm(self, telegram_user_id: int, context: str | None) -> CallbackHandleResult:
         booking_id_raw = context or self._state.get_context_value(telegram_user_id, "cancel_booking_id")
+        cancel_slot_dt = self._state.get_context_value(telegram_user_id, "cancel_slot_datetime")
         if booking_id_raw is None:
             return self._stale_response()
         try:
@@ -578,9 +612,12 @@ class TelegramCallbackRouter:
             client_telegram_user_id=telegram_user_id,
             booking_id=booking_id,
         )
+        result_message = str(response.get("message", ""))
+        if response.get("cancelled") is True and cancel_slot_dt is not None:
+            result_message = f"{result_message}\nСлот: {cancel_slot_dt}"
         self._state.set_menu(telegram_user_id, _MENU_CLIENT, reset_context=True)
         return CallbackHandleResult(
-            text=str(response.get("message", "")),
+            text=result_message,
             reply_markup=build_menu_markup(_MENU_CLIENT),
             notifications=_coerce_notifications(response.get("notifications")),
         )
@@ -623,14 +660,17 @@ class TelegramCallbackRouter:
         lines = ["Ближайшее расписание мастера:"]
         if master is not None:
             lines.append(f"- Профиль: {master['display_name']}")
-            lines.append(f"- Обед: {master['lunch_start']} - {master['lunch_end']}")
+            lines.append(
+                f"- Обед: {format_ru_time(dt_time.fromisoformat(str(master['lunch_start'])))} - "
+                f"{format_ru_time(dt_time.fromisoformat(str(master['lunch_end'])))}"
+            )
         has_rows = False
         for row in rows:
             slot_start = row["slot_start"]
             slot_start_dt = slot_start if isinstance(slot_start, datetime) else datetime.fromisoformat(str(slot_start))
             service_type = str(row["service_type"])
             lines.append(
-                f"- {slot_start_dt.astimezone(UTC).strftime('%Y-%m-%d %H:%M')} ({SERVICE_OPTION_LABELS_RU.get(service_type, service_type)})"
+                f"- {format_ru_datetime(slot_start_dt)} ({SERVICE_OPTION_LABELS_RU.get(service_type, service_type)})"
             )
             has_rows = True
         if not has_rows:
@@ -678,9 +718,14 @@ class TelegramCallbackRouter:
                 end_at=datetime.combine(on_date, work_end, tzinfo=UTC),
             ),
         )
+        result_text = (
+            f"{result.message}\n"
+            f"Дата: {format_ru_date(on_date)}\n"
+            f"Интервал: {format_ru_time(work_start)}-{format_ru_time(work_end)}"
+        )
         self._state.set_menu(telegram_user_id, _MENU_MASTER, reset_context=True)
         return CallbackHandleResult(
-            text=result.message,
+            text=result_text,
             reply_markup=build_menu_markup(_MENU_MASTER),
         )
 
@@ -695,16 +740,22 @@ class TelegramCallbackRouter:
         if context is None or context not in _MASTER_LUNCH_PRESETS:
             return self._invalid_response()
         lunch_start_raw, lunch_end_raw = _MASTER_LUNCH_PRESETS[context]
+        lunch_start = dt_time.fromisoformat(lunch_start_raw)
+        lunch_end = dt_time.fromisoformat(lunch_end_raw)
         result = self._schedule.update_lunch_break(
             master_telegram_user_id=telegram_user_id,
             command=MasterLunchBreakCommand(
-                lunch_start=dt_time.fromisoformat(lunch_start_raw),
-                lunch_end=dt_time.fromisoformat(lunch_end_raw),
+                lunch_start=lunch_start,
+                lunch_end=lunch_end,
             ),
+        )
+        result_text = (
+            f"{result.message}\n"
+            f"Новый интервал: {format_ru_time(lunch_start)}-{format_ru_time(lunch_end)}"
         )
         self._state.set_menu(telegram_user_id, _MENU_MASTER, reset_context=True)
         return CallbackHandleResult(
-            text=result.message,
+            text=result_text,
             reply_markup=build_menu_markup(_MENU_MASTER),
         )
 
@@ -776,7 +827,7 @@ class TelegramCallbackRouter:
             text=(
                 "Подтвердите ручную запись:\n"
                 f"- Услуга: {SERVICE_OPTION_LABELS_RU.get(service_type, service_type)}\n"
-                f"- Слот: {slot_start.isoformat()}\n"
+                f"- Слот: {format_ru_datetime(slot_start)}\n"
                 f"- Клиент: {_MANUAL_BOOKING_CLIENT_NAME}"
             ),
             reply_markup=build_master_manual_confirm_markup(),
@@ -801,9 +852,16 @@ class TelegramCallbackRouter:
                 slot_start=slot_start,
             ),
         )
+        duration_minutes = self._resolve_service_duration_minutes(service_type=service_type)
+        result_text = (
+            f"{result.message}\n"
+            f"Слот: {format_ru_slot_range(slot_start, duration_minutes=duration_minutes)} "
+            f"({format_ru_datetime(slot_start)})\n"
+            f"Услуга: {SERVICE_OPTION_LABELS_RU.get(service_type, service_type)}"
+        )
         self._state.set_menu(telegram_user_id, _MENU_MASTER, reset_context=True)
         return CallbackHandleResult(
-            text=result.message,
+            text=result_text,
             reply_markup=build_menu_markup(_MENU_MASTER),
         )
 
@@ -831,9 +889,28 @@ class TelegramCallbackRouter:
             return self._invalid_response()
 
         self._state.set_context_value(telegram_user_id, "master_cancel_booking_id", str(booking_id))
+        booking = self._find_master_booking_for_user(telegram_user_id=telegram_user_id, booking_id=booking_id)
+        if booking is not None:
+            self._state.set_context_value(
+                telegram_user_id,
+                "master_cancel_slot_datetime",
+                format_ru_datetime(booking["slot_start"]),
+            )
+            self._state.set_context_value(
+                telegram_user_id,
+                "master_cancel_service_type",
+                booking["service_type"],
+            )
         self._state.set_menu(telegram_user_id, _MENU_MASTER_CANCEL_REASON_SELECT)
+        prompt = "Выберите причину отмены."
+        if booking is not None:
+            prompt = (
+                f"{prompt}\n"
+                f"Слот: {format_ru_datetime(booking['slot_start'])}\n"
+                f"Услуга: {SERVICE_OPTION_LABELS_RU.get(booking['service_type'], booking['service_type'])}"
+            )
         return CallbackHandleResult(
-            text="Выберите причину отмены.",
+            text=prompt,
             reply_markup=build_master_cancel_reason_markup(),
         )
 
@@ -847,14 +924,17 @@ class TelegramCallbackRouter:
         self._state.set_context_value(telegram_user_id, "master_cancel_reason_code", context)
         self._state.set_menu(telegram_user_id, _MENU_MASTER_CANCEL_CONFIRM)
         reason = _MASTER_CANCEL_REASONS[context]
+        slot_dt = self._state.get_context_value(telegram_user_id, "master_cancel_slot_datetime")
+        suffix = f"\nСлот: {slot_dt}" if slot_dt is not None else ""
         return CallbackHandleResult(
-            text=f"Подтвердите отмену записи #{booking_id}. Причина: {reason}",
+            text=f"Подтвердите отмену записи #{booking_id}. Причина: {reason}{suffix}",
             reply_markup=build_master_cancel_confirm_markup(),
         )
 
     def _handle_master_cancel_confirm(self, *, telegram_user_id: int) -> CallbackHandleResult:
         booking_id_raw = self._state.get_context_value(telegram_user_id, "master_cancel_booking_id")
         reason_code = self._state.get_context_value(telegram_user_id, "master_cancel_reason_code")
+        slot_dt = self._state.get_context_value(telegram_user_id, "master_cancel_slot_datetime")
         if booking_id_raw is None or reason_code is None:
             return self._stale_response()
         if reason_code not in _MASTER_CANCEL_REASONS:
@@ -870,9 +950,16 @@ class TelegramCallbackRouter:
             booking_id=booking_id,
             reason=_MASTER_CANCEL_REASONS[reason_code],
         )
+        result_text = str(response.get("message", ""))
+        if response.get("cancelled") is True:
+            reason_text = _MASTER_CANCEL_REASONS[reason_code]
+            if slot_dt is not None:
+                result_text = f"{result_text}\nСлот: {slot_dt}\nПричина: {reason_text}"
+            else:
+                result_text = f"{result_text}\nПричина: {reason_text}"
         self._state.set_menu(telegram_user_id, _MENU_MASTER, reset_context=True)
         return CallbackHandleResult(
-            text=str(response.get("message", "")),
+            text=result_text,
             reply_markup=build_menu_markup(_MENU_MASTER),
             notifications=_coerce_notifications(response.get("notifications")),
         )
@@ -1014,6 +1101,23 @@ class TelegramCallbackRouter:
                 )
             return result
 
+    def _find_client_booking_for_user(self, *, telegram_user_id: int, booking_id: int) -> dict[str, object] | None:
+        for booking in self._list_client_future_bookings(telegram_user_id=telegram_user_id):
+            if booking["id"] == booking_id:
+                return booking
+        return None
+
+    def _find_master_booking_for_user(self, *, telegram_user_id: int, booking_id: int) -> dict[str, object] | None:
+        for booking in self._list_master_future_bookings(telegram_user_id=telegram_user_id):
+            if booking["id"] == booking_id:
+                return booking
+        return None
+
+    def _resolve_service_duration_minutes(self, *, service_type: str) -> int:
+        with self._engine.connect() as conn:
+            duration = resolve_service_duration_minutes(service_type, connection=conn)
+        return duration if duration is not None else 60
+
     def _list_master_future_bookings(self, *, telegram_user_id: int) -> list[dict[str, object]]:
         master_ctx = self._schedule.resolve_context(master_telegram_user_id=telegram_user_id)
         if master_ctx is None:
@@ -1138,28 +1242,40 @@ def build_root_menu_markup() -> InlineKeyboardMarkup:
 
 def build_menu_markup(menu: str) -> InlineKeyboardMarkup:
     if menu == _MENU_CLIENT:
-        rows = [
-            [InlineKeyboardButton(text="Новая запись", callback_data=encode_callback_data(action="cb"))],
-            [InlineKeyboardButton(text="Отменить запись", callback_data=encode_callback_data(action="cc"))],
-            [InlineKeyboardButton(text="Главное меню", callback_data=encode_callback_data(action="hm"))],
-        ]
+        rows = chunk_inline_buttons(
+            [
+                InlineKeyboardButton(text="Новая запись", callback_data=encode_callback_data(action="cb")),
+                InlineKeyboardButton(text="Отменить запись", callback_data=encode_callback_data(action="cc")),
+            ],
+            max_per_row=MOBILE_MENU_MAX_BUTTONS_PER_ROW,
+        )
+        rows.extend(
+            [[InlineKeyboardButton(text="Главное меню", callback_data=encode_callback_data(action="hm"))]]
+        )
     elif menu == _MENU_MASTER:
-        rows = [
-            [InlineKeyboardButton(text="Просмотр расписания", callback_data=encode_callback_data(action="msv"))],
-            [InlineKeyboardButton(text="Выходной день", callback_data=encode_callback_data(action="msd"))],
-            [InlineKeyboardButton(text="Обед", callback_data=encode_callback_data(action="mlm"))],
-            [InlineKeyboardButton(text="Ручная запись", callback_data=encode_callback_data(action="msb"))],
-            [InlineKeyboardButton(text="Отмена записи", callback_data=encode_callback_data(action="msc"))],
-            [InlineKeyboardButton(text="Управление мастерами", callback_data=encode_callback_data(action="mam"))],
-            [InlineKeyboardButton(text="Главное меню", callback_data=encode_callback_data(action="hm"))],
-        ]
+        rows = chunk_inline_buttons(
+            [
+                InlineKeyboardButton(text="Просмотр расписания", callback_data=encode_callback_data(action="msv")),
+                InlineKeyboardButton(text="Выходной день", callback_data=encode_callback_data(action="msd")),
+                InlineKeyboardButton(text="Обед", callback_data=encode_callback_data(action="mlm")),
+                InlineKeyboardButton(text="Ручная запись", callback_data=encode_callback_data(action="msb")),
+                InlineKeyboardButton(text="Отмена записи", callback_data=encode_callback_data(action="msc")),
+                InlineKeyboardButton(text="Управление мастерами", callback_data=encode_callback_data(action="mam")),
+            ],
+            max_per_row=MOBILE_MENU_MAX_BUTTONS_PER_ROW,
+        )
+        rows.extend(
+            [[InlineKeyboardButton(text="Главное меню", callback_data=encode_callback_data(action="hm"))]]
+        )
     elif menu == _MENU_MASTER_ADMIN:
-        rows = [
-            [InlineKeyboardButton(text="Добавить мастера", callback_data=encode_callback_data(action="maa"))],
-            [InlineKeyboardButton(text="Удалить мастера", callback_data=encode_callback_data(action="mad"))],
-            [InlineKeyboardButton(text="Назад", callback_data=encode_callback_data(action="mr"))],
-            [InlineKeyboardButton(text="Главное меню", callback_data=encode_callback_data(action="hm"))],
-        ]
+        rows = chunk_inline_buttons(
+            [
+                InlineKeyboardButton(text="Добавить мастера", callback_data=encode_callback_data(action="maa")),
+                InlineKeyboardButton(text="Удалить мастера", callback_data=encode_callback_data(action="mad")),
+            ],
+            max_per_row=MOBILE_MENU_MAX_BUTTONS_PER_ROW,
+        )
+        rows.extend(_back_and_home_rows(action_back="mr"))
     else:
         rows = [
             [
@@ -1172,7 +1288,7 @@ def build_menu_markup(menu: str) -> InlineKeyboardMarkup:
 
 
 def build_client_master_markup(masters: list[object]) -> InlineKeyboardMarkup:
-    rows: list[list[InlineKeyboardButton]] = []
+    buttons: list[InlineKeyboardButton] = []
     for item in masters:
         if not isinstance(item, dict):
             continue
@@ -1180,66 +1296,68 @@ def build_client_master_markup(masters: list[object]) -> InlineKeyboardMarkup:
         name = item.get("display_name")
         if not isinstance(master_id, int) or not isinstance(name, str):
             continue
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=name,
-                    callback_data=encode_callback_data(action="csm", context=str(master_id)),
-                )
-            ]
+        buttons.append(
+            InlineKeyboardButton(
+                text=name,
+                callback_data=encode_callback_data(action="csm", context=str(master_id)),
+            )
         )
+    rows = chunk_inline_buttons(buttons, max_per_row=MOBILE_MENU_MAX_BUTTONS_PER_ROW)
     rows.extend(_back_and_home_rows(action_back="bk"))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def build_client_service_markup(service_options: list[object]) -> InlineKeyboardMarkup:
-    rows = _service_rows(service_options=service_options, action="css")
+    buttons = _service_buttons(service_options=service_options, action="css")
+    rows = chunk_inline_buttons(buttons, max_per_row=MOBILE_MENU_MAX_BUTTONS_PER_ROW)
     rows.extend(_back_and_home_rows(action_back="bk"))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def build_master_service_markup() -> InlineKeyboardMarkup:
-    rows = _service_rows(service_options=list_service_options(), action="mbs")
+    buttons = _service_buttons(service_options=list_service_options(), action="mbs")
+    rows = chunk_inline_buttons(buttons, max_per_row=MOBILE_MENU_MAX_BUTTONS_PER_ROW)
     rows.extend(_back_and_home_rows(action_back="mr"))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def build_client_date_markup(*, action: str, days_ahead: int = 7, action_back: str = "bk") -> InlineKeyboardMarkup:
     today = datetime.now(UTC).date()
-    rows: list[list[InlineKeyboardButton]] = []
+    buttons: list[InlineKeyboardButton] = []
     for offset in range(days_ahead):
         day = today + timedelta(days=offset)
         token = day.strftime("%Y%m%d")
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=day.isoformat(),
-                    callback_data=encode_callback_data(action=action, context=token),
-                )
-            ]
+        buttons.append(
+            InlineKeyboardButton(
+                text=format_ru_date(day),
+                callback_data=encode_callback_data(action=action, context=token),
+            )
         )
+    rows = chunk_inline_buttons(buttons, max_per_row=MOBILE_DATE_SLOT_MAX_BUTTONS_PER_ROW)
     rows.extend(_back_and_home_rows(action_back=action_back))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def build_slot_markup(slots: list[object], *, action: str, action_back: str = "bk") -> InlineKeyboardMarkup:
-    rows: list[list[InlineKeyboardButton]] = []
+    buttons: list[InlineKeyboardButton] = []
     for item in slots:
         if not isinstance(item, dict):
             continue
         start_at = item.get("start_at")
+        end_at = item.get("end_at")
         if not isinstance(start_at, str):
             continue
         slot_start = _as_datetime(start_at)
+        slot_end = _as_datetime(end_at) if isinstance(end_at, str) else slot_start
+        duration_minutes = max(1, int((slot_end - slot_start).total_seconds() // 60))
         token = _format_slot_token(slot_start)
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=slot_start.astimezone(UTC).strftime("%H:%M"),
-                    callback_data=encode_callback_data(action=action, context=token),
-                )
-            ]
+        buttons.append(
+            InlineKeyboardButton(
+                text=format_ru_slot_range(slot_start, duration_minutes=duration_minutes),
+                callback_data=encode_callback_data(action=action, context=token),
+            )
         )
+    rows = chunk_inline_buttons(buttons, max_per_row=MOBILE_DATE_SLOT_MAX_BUTTONS_PER_ROW)
     rows.extend(_back_and_home_rows(action_back=action_back))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -1270,7 +1388,7 @@ def build_client_cancel_select_markup(bookings: list[dict[str, object]]) -> Inli
         master_name = booking.get("master_name")
         if not isinstance(booking_id, int) or not isinstance(slot_start, datetime) or not isinstance(master_name, str):
             continue
-        label = f"#{booking_id} {slot_start.astimezone(UTC).strftime('%Y-%m-%d %H:%M')} {master_name}"
+        label = f"#{booking_id} {format_ru_datetime(slot_start)} {master_name}"
         rows.append(
             [
                 InlineKeyboardButton(
@@ -1302,16 +1420,15 @@ def build_master_day_off_markup() -> InlineKeyboardMarkup:
 
 
 def build_master_lunch_markup() -> InlineKeyboardMarkup:
-    rows: list[list[InlineKeyboardButton]] = []
+    buttons: list[InlineKeyboardButton] = []
     for preset_code, (start_at, end_at) in _MASTER_LUNCH_PRESETS.items():
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"{start_at[:5]} - {end_at[:5]}",
-                    callback_data=encode_callback_data(action="mls", context=preset_code),
-                )
-            ]
+        buttons.append(
+            InlineKeyboardButton(
+                text=f"{start_at[:5]}-{end_at[:5]}",
+                callback_data=encode_callback_data(action="mls", context=preset_code),
+            )
         )
+    rows = chunk_inline_buttons(buttons, max_per_row=MOBILE_MENU_MAX_BUTTONS_PER_ROW)
     rows.extend(_back_and_home_rows(action_back="mr"))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -1325,7 +1442,7 @@ def build_master_cancel_select_markup(bookings: list[dict[str, object]]) -> Inli
         if not isinstance(booking_id, int) or not isinstance(slot_start, datetime) or not isinstance(service_type, str):
             continue
         label = (
-            f"#{booking_id} {slot_start.astimezone(UTC).strftime('%Y-%m-%d %H:%M')} "
+            f"#{booking_id} {format_ru_datetime(slot_start)} "
             f"{SERVICE_OPTION_LABELS_RU.get(service_type, service_type)}"
         )
         rows.append(
@@ -1341,16 +1458,15 @@ def build_master_cancel_select_markup(bookings: list[dict[str, object]]) -> Inli
 
 
 def build_master_cancel_reason_markup() -> InlineKeyboardMarkup:
-    rows: list[list[InlineKeyboardButton]] = []
+    buttons: list[InlineKeyboardButton] = []
     for reason_code, reason_text in _MASTER_CANCEL_REASONS.items():
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=reason_text,
-                    callback_data=encode_callback_data(action="mcr", context=reason_code),
-                )
-            ]
+        buttons.append(
+            InlineKeyboardButton(
+                text=reason_text,
+                callback_data=encode_callback_data(action="mcr", context=reason_code),
+            )
         )
+    rows = chunk_inline_buttons(buttons, max_per_row=MOBILE_MENU_MAX_BUTTONS_PER_ROW)
     rows.extend(_back_and_home_rows(action_back="mr"))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -1365,44 +1481,46 @@ def build_master_cancel_confirm_markup() -> InlineKeyboardMarkup:
 
 
 def build_master_admin_add_markup(candidates: list[dict[str, object]]) -> InlineKeyboardMarkup:
-    rows: list[list[InlineKeyboardButton]] = []
+    buttons: list[InlineKeyboardButton] = []
     for candidate in candidates:
         telegram_user_id = candidate.get("telegram_user_id")
         if not isinstance(telegram_user_id, int):
             continue
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"tg:{telegram_user_id}",
-                    callback_data=encode_callback_data(action="mau", context=str(telegram_user_id)),
-                )
-            ]
+        buttons.append(
+            InlineKeyboardButton(
+                text=f"tg:{telegram_user_id}",
+                callback_data=encode_callback_data(action="mau", context=str(telegram_user_id)),
+            )
         )
+    rows = chunk_inline_buttons(buttons, max_per_row=MOBILE_MENU_MAX_BUTTONS_PER_ROW)
     rows.extend(_back_and_home_rows(action_back="mr"))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def build_master_admin_remove_markup(masters: list[dict[str, object]]) -> InlineKeyboardMarkup:
-    rows: list[list[InlineKeyboardButton]] = []
+    buttons: list[InlineKeyboardButton] = []
     for item in masters:
         telegram_user_id = item.get("telegram_user_id")
         display_name = item.get("display_name")
         if not isinstance(telegram_user_id, int) or not isinstance(display_name, str):
             continue
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"{display_name} (tg:{telegram_user_id})",
-                    callback_data=encode_callback_data(action="mar", context=str(telegram_user_id)),
-                )
-            ]
+        buttons.append(
+            InlineKeyboardButton(
+                text=f"{display_name} (tg:{telegram_user_id})",
+                callback_data=encode_callback_data(action="mar", context=str(telegram_user_id)),
+            )
         )
+    rows = chunk_inline_buttons(buttons, max_per_row=MOBILE_MENU_MAX_BUTTONS_PER_ROW)
     rows.extend(_back_and_home_rows(action_back="mr"))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def _service_rows(*, service_options: list[object], action: str) -> list[list[InlineKeyboardButton]]:
-    rows: list[list[InlineKeyboardButton]] = []
+    return [[button] for button in _service_buttons(service_options=service_options, action=action)]
+
+
+def _service_buttons(*, service_options: list[object], action: str) -> list[InlineKeyboardButton]:
+    buttons: list[InlineKeyboardButton] = []
     for item in service_options:
         if not isinstance(item, dict):
             continue
@@ -1410,15 +1528,13 @@ def _service_rows(*, service_options: list[object], action: str) -> list[list[In
         label = item.get("label")
         if not isinstance(code, str) or not isinstance(label, str):
             continue
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=label,
-                    callback_data=encode_callback_data(action=action, context=code),
-                )
-            ]
+        buttons.append(
+            InlineKeyboardButton(
+                text=label,
+                callback_data=encode_callback_data(action=action, context=code),
+            )
         )
-    return rows
+    return buttons
 
 
 def _back_and_home_rows(*, action_back: str) -> list[list[InlineKeyboardButton]]:

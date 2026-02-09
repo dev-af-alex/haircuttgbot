@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sqlite3
 from datetime import datetime
 from datetime import UTC
@@ -164,6 +165,7 @@ def _book_once(router: TelegramCallbackRouter, *, telegram_user_id: int) -> tupl
 
     result = router.handle(telegram_user_id=telegram_user_id, data=slot_callbacks[0])
     assert "Подтвердите запись" in result.text
+    assert re.search(r"Слот: \d{2}\.\d{2}\.\d{4} \d{2}:\d{2}", result.text)
 
     result = router.handle(telegram_user_id=telegram_user_id, data="hb1|ccf")
     return result.text, slot_callbacks[0]
@@ -175,6 +177,8 @@ def test_client_interactive_booking_and_cancel_flow() -> None:
 
     booking_text, _ = _book_once(router, telegram_user_id=2000001)
     assert "успешно создана" in booking_text
+    assert "Слот:" in booking_text
+    assert re.search(r"\d{2}:\d{2}-\d{2}:\d{2}", booking_text)
 
     result = router.handle(telegram_user_id=2000001, data="hb1|cc")
     cancel_pick_callbacks = _callbacks_for_action(result.reply_markup, "cci")
@@ -182,11 +186,13 @@ def test_client_interactive_booking_and_cancel_flow() -> None:
 
     result = router.handle(telegram_user_id=2000001, data=cancel_pick_callbacks[0])
     assert "Подтвердите отмену" in result.text
+    assert "Слот:" in result.text
     cancel_confirm_callbacks = _callbacks_for_action(result.reply_markup, "ccn")
     assert cancel_confirm_callbacks
 
     result = router.handle(telegram_user_id=2000001, data=cancel_confirm_callbacks[0])
     assert "успешно отменена" in result.text
+    assert "Слот:" in result.text
 
 
 def test_client_interactive_flow_preserves_one_active_future_booking_limit() -> None:
@@ -270,3 +276,23 @@ def test_client_service_selection_controls_slot_granularity() -> None:
     assert combo_slot_callbacks
     combo_tokens = _slot_tokens(combo_slot_callbacks)
     assert all(not token.endswith("1000") for token in combo_tokens)
+
+
+def test_client_interactive_keyboards_keep_mobile_friendly_rows() -> None:
+    router = TelegramCallbackRouter(_setup_flow_schema())
+    router.seed_root_menu(telegram_user_id=2000001)
+
+    result = router.handle(telegram_user_id=2000001, data="hb1|cm")
+    client_menu_row_sizes = [len(row) for row in result.reply_markup.inline_keyboard]
+    assert max(client_menu_row_sizes) <= 2
+
+    result = router.handle(telegram_user_id=2000001, data="hb1|cb")
+    master_row_sizes = [len(row) for row in result.reply_markup.inline_keyboard[:-2]]
+    assert master_row_sizes
+    assert max(master_row_sizes) <= 2
+
+    master_callbacks = _callbacks_for_action(result.reply_markup, "csm")
+    result = router.handle(telegram_user_id=2000001, data=master_callbacks[0])
+    service_row_sizes = [len(row) for row in result.reply_markup.inline_keyboard[:-2]]
+    assert service_row_sizes
+    assert max(service_row_sizes) <= 2

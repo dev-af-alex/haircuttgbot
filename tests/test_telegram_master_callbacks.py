@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sqlite3
 from datetime import UTC, datetime, time
 
@@ -163,6 +164,7 @@ def test_master_interactive_schedule_dayoff_lunch_manual_flow() -> None:
 
     result = router.handle(telegram_user_id=1000001, data="hb1|msv")
     assert "Ближайшее расписание мастера" in result.text
+    assert re.search(r"Обед: \d{2}:\d{2} - \d{2}:\d{2}", result.text)
 
     result = router.handle(telegram_user_id=1000001, data="hb1|msd")
     day_off_callbacks = _callbacks_for_action(result.reply_markup, "msu")
@@ -170,6 +172,8 @@ def test_master_interactive_schedule_dayoff_lunch_manual_flow() -> None:
 
     result = router.handle(telegram_user_id=1000001, data=day_off_callbacks[0])
     assert "Выходной интервал" in result.text
+    assert "Дата:" in result.text
+    assert "Интервал:" in result.text
 
     result = router.handle(telegram_user_id=1000001, data="hb1|mlm")
     lunch_callbacks = _callbacks_for_action(result.reply_markup, "mls")
@@ -177,6 +181,7 @@ def test_master_interactive_schedule_dayoff_lunch_manual_flow() -> None:
 
     result = router.handle(telegram_user_id=1000001, data=lunch_callbacks[-1])
     assert "Обеденный перерыв обновлен" in result.text
+    assert "Новый интервал:" in result.text
 
     result = router.handle(telegram_user_id=1000001, data="hb1|msb")
     service_callbacks = _callbacks_for_action(result.reply_markup, "mbs")
@@ -193,9 +198,12 @@ def test_master_interactive_schedule_dayoff_lunch_manual_flow() -> None:
 
     result = router.handle(telegram_user_id=1000001, data=slot_callbacks[0])
     assert "Подтвердите ручную запись" in result.text
+    assert re.search(r"Слот: \d{2}\.\d{2}\.\d{4} \d{2}:\d{2}", result.text)
 
     result = router.handle(telegram_user_id=1000001, data="hb1|mbc")
     assert "Ручная запись создана" in result.text
+    assert "Слот:" in result.text
+    assert re.search(r"\d{2}:\d{2}-\d{2}:\d{2}", result.text)
 
 
 def test_master_interactive_cancel_requires_reason_and_sends_notifications() -> None:
@@ -218,6 +226,8 @@ def test_master_interactive_cancel_requires_reason_and_sends_notifications() -> 
     result = router.handle(telegram_user_id=1000001, data=cancel_pick_callbacks[0])
     reason_callbacks = _callbacks_for_action(result.reply_markup, "mcr")
     assert reason_callbacks
+    assert "Слот:" in result.text
+    assert "Услуга:" in result.text
 
     # confirm without choosing reason is stale
     stale = router.handle(telegram_user_id=1000001, data="hb1|mcn")
@@ -225,9 +235,12 @@ def test_master_interactive_cancel_requires_reason_and_sends_notifications() -> 
 
     result = router.handle(telegram_user_id=1000001, data=reason_callbacks[0])
     assert "Подтвердите отмену" in result.text
+    assert "Слот:" in result.text
 
     result = router.handle(telegram_user_id=1000001, data="hb1|mcn")
     assert "успешно отменена" in result.text
+    assert "Слот:" in result.text
+    assert "Причина:" in result.text
     assert len(result.notifications) == 2
 
 
@@ -306,3 +319,34 @@ def test_non_bootstrap_master_is_denied_for_master_admin_callbacks() -> None:
 
     result = router.handle(telegram_user_id=1000002, data="hb1|mam")
     assert "Недостаточно прав" in result.text
+
+
+def test_master_and_admin_keyboards_keep_mobile_friendly_rows() -> None:
+    engine = _setup_flow_schema()
+    router = TelegramCallbackRouter(engine, bootstrap_master_telegram_user_id=1000001)
+    router.seed_root_menu(telegram_user_id=1000001)
+
+    result = router.handle(telegram_user_id=1000001, data="hb1|mm")
+    master_menu_row_sizes = [len(row) for row in result.reply_markup.inline_keyboard]
+    assert max(master_menu_row_sizes) <= 2
+
+    result = router.handle(telegram_user_id=1000001, data="hb1|msb")
+    service_row_sizes = [len(row) for row in result.reply_markup.inline_keyboard[:-2]]
+    assert service_row_sizes
+    assert max(service_row_sizes) <= 2
+
+    router.handle(telegram_user_id=1000001, data="hb1|mr")
+    result = router.handle(telegram_user_id=1000001, data="hb1|mlm")
+    lunch_row_sizes = [len(row) for row in result.reply_markup.inline_keyboard[:-2]]
+    assert lunch_row_sizes
+    assert max(lunch_row_sizes) <= 2
+
+    router.handle(telegram_user_id=1000001, data="hb1|mr")
+    result = router.handle(telegram_user_id=1000001, data="hb1|mam")
+    admin_menu_row_sizes = [len(row) for row in result.reply_markup.inline_keyboard]
+    assert max(admin_menu_row_sizes) <= 2
+
+    result = router.handle(telegram_user_id=1000001, data="hb1|maa")
+    add_row_sizes = [len(row) for row in result.reply_markup.inline_keyboard[:-2]]
+    assert add_row_sizes
+    assert max(add_row_sizes) <= 2

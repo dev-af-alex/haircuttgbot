@@ -196,8 +196,8 @@ docker compose --env-file /opt/haircuttgbot/shared/.env logs bot-api --tail=50 |
 Then run the canonical smoke path from `docs/04-delivery/local-dev.md` against VM services (seed + booking/cancellation/schedule + bootstrap master add/remove scenario).
 When Telegram token is configured, additionally validate button-first chat flows:
 - `Client`: new booking + cancel booking via buttons.
-- `Client` mixed-duration check: `Стрижка` shows 30-minute starts (contains `:30`), `Стрижка + борода` remains hourly.
-- `Master`: schedule view + day-off + lunch update + manual booking + cancellation with reason via buttons.
+- `Client` mixed-duration check: `Стрижка` shows 30-minute slot range labels (for example `10:00-10:30`), `Стрижка + борода` remains hourly (`10:00-11:00`).
+- `Master`: schedule view + day-off + lunch update + manual booking + cancellation with reason via buttons; outputs should use readable labels (`DD.MM.YYYY HH:MM`, `HH:MM-HH:MM`).
 - `Bootstrap master`: `Управление мастерами` -> add one master -> remove same master.
 
 ### 6. Persist on reboot (systemd)

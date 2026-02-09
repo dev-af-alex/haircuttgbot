@@ -152,7 +152,7 @@ Rules:
     - Local-run impact: local verification expands from fixed-hour assumptions to mixed-duration slots and updated test fixtures.
     - Delivered: Group 01 service catalog duration model + seed defaults, Group 02 duration-aware availability and shared overlap predicate enforcement, Group 03 interactive callback duration wiring + idempotency regression coverage + mixed-duration smoke/doc synchronization.
 
-- EPIC-015 — Localized readable time and final mobile UX polish — Status: TODO
+- EPIC-015 — Localized readable time and final mobile UX polish — Status: DONE
     - Goal: deliver human-readable time/date messages and complete mobile-first Telegram interaction polish for client/master flows.
     - Acceptance:
         - Client-facing and master-facing booking/schedule messages display slot time in readable localized format (`ru`) instead of raw timestamps.
@@ -161,3 +161,4 @@ Rules:
         - Local/VM smoke includes a real Telegram check for readable time output and phone-usable button menus.
     - Dependencies: EPIC-012, EPIC-013, EPIC-014.
     - Local-run impact: smoke and manual QA checklists add UI/format assertions in addition to API correctness.
+    - Delivered: Group 01 finalized ADR-0012 + shared `ru` formatter and keyboard layout helpers; Group 02 completed client readable booking/cancel texts and client mobile row constraints; Group 03 completed master/admin readable messages, master/admin mobile row constraints, expanded callback regressions, and synchronized local/VM Telegram validation runbooks.

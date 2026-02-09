@@ -88,8 +88,8 @@ Use this sequence when validating aiogram runtime against a real Telegram chat.
    - create one future booking;
    - start a second booking attempt through buttons and confirm bot returns one-active-booking rejection.
 7. Validate mixed-duration slot behavior in chat:
-   - in `Новая запись`, choose `Стрижка` and confirm 30-minute slot options are present (for example `10:00`, `10:30`);
-   - restart booking flow, choose `Стрижка + борода` and confirm hourly slot options (no `:30` starts).
+   - in `Новая запись`, choose `Стрижка` and confirm 30-minute slot range labels are present (for example `10:00-10:30`, `10:30-11:00`);
+   - restart booking flow, choose `Стрижка + борода` and confirm hourly slot range labels (for example `10:00-11:00`, and no `10:30-11:30` starts).
 8. Optional master-role validation requires a second Telegram account:
    - map second account to `Master` role and link to `masters.user_id` record;
    - run `/start`, tap `Мастер`, and validate buttons:
@@ -98,6 +98,10 @@ Use this sequence when validating aiogram runtime against a real Telegram chat.
      - `Обед`
      - `Ручная запись`
      - `Отмена записи` (reason selection is mandatory).
+   - verify readable master texts:
+     - `Просмотр расписания` output uses `DD.MM.YYYY HH:MM` slot labels and `HH:MM-HH:MM` lunch interval;
+     - `Выходной день` and `Обед` confirmations include readable interval/date details;
+     - `Ручная запись` and `Отмена записи` confirmations include readable `Слот` details and reason context.
 9. Optional bootstrap-master administration validation (same master account as `BOOTSTRAP_MASTER_TELEGRAM_ID`):
    - in `Мастер` menu open `Управление мастерами`;
    - run `Добавить мастера` for one client user and check success message;
