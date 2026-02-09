@@ -3,7 +3,7 @@
 Legend: TODO / IN_PROGRESS / DONE
 Sizing target: each task is 1-3 dev-days.
 
-- T-001 — Define abuse-control strategy and event contract — Status: TODO
+- T-001 — Define abuse-control strategy and event contract — Status: DONE
   - Scope: define command throttling policy, block/deny behavior, and structured event schema for abuse rejections.
   - Acceptance:
     - policy defines per-user limits, burst windows, and deny response semantics.
@@ -11,7 +11,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 1 dev-day
   - Dependencies: EPIC-007, EPIC-008
 
-- T-002 — Implement throttling middleware for Telegram-facing commands — Status: TODO
+- T-002 — Implement throttling middleware for Telegram-facing commands — Status: DONE
   - Scope: add runtime throttling guard for command paths and emit structured abuse-deny events.
   - Acceptance:
     - repeated burst requests are rejected by configured policy.

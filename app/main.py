@@ -2,9 +2,12 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time
+from json import JSONDecodeError
+from typing import Any
 
 from aiogram import Dispatcher
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Request, Response
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.auth import RoleRepository, authorize_command
@@ -22,9 +25,11 @@ from app.db.session import get_engine
 from app.observability import (
     emit_event,
     instrument_endpoint,
+    observe_abuse_outcome,
     render_metrics,
     set_service_health,
 )
+from app.throttling import TelegramCommandThrottle
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
@@ -43,6 +48,69 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="haircuttgbot-api", version="0.1.0", lifespan=lifespan)
+app.state.telegram_throttle = TelegramCommandThrottle(
+    limit=int(os.getenv("TELEGRAM_THROTTLE_LIMIT", "8")),
+    window_seconds=int(os.getenv("TELEGRAM_THROTTLE_WINDOW_SECONDS", "10")),
+)
+
+_THROTTLED_PATH_PREFIX = "/internal/telegram/"
+_THROTTLED_METHODS = {"POST"}
+_THROTTLED_USER_KEYS = (
+    "client_telegram_user_id",
+    "master_telegram_user_id",
+    "telegram_user_id",
+)
+
+
+def _extract_telegram_user_id(payload: Any) -> int | None:
+    if not isinstance(payload, dict):
+        return None
+    for key in _THROTTLED_USER_KEYS:
+        value = payload.get(key)
+        if isinstance(value, int):
+            return value
+    return None
+
+
+@app.middleware("http")
+async def telegram_abuse_throttle(request: Request, call_next):  # type: ignore[no-untyped-def]
+    if request.method not in _THROTTLED_METHODS or not request.url.path.startswith(_THROTTLED_PATH_PREFIX):
+        return await call_next(request)
+
+    telegram_user_id: int | None = None
+    try:
+        payload = await request.json()
+        telegram_user_id = _extract_telegram_user_id(payload)
+    except (JSONDecodeError, UnicodeDecodeError):
+        payload = None
+        _ = payload
+
+    if telegram_user_id is None:
+        return await call_next(request)
+
+    decision = app.state.telegram_throttle.check(telegram_user_id)
+    observe_abuse_outcome(request.url.path, allowed=decision.allowed)
+
+    if not decision.allowed:
+        emit_event(
+            "abuse_throttle_deny",
+            telegram_user_id=telegram_user_id,
+            path=request.url.path,
+            method=request.method,
+            window_seconds=app.state.telegram_throttle.window_seconds,
+            limit=app.state.telegram_throttle.limit,
+            retry_after_seconds=decision.retry_after_seconds,
+        )
+        return JSONResponse(
+            status_code=429,
+            content={
+                "detail": "Слишком много запросов. Повторите позже.",
+                "code": "throttled",
+                "retry_after_seconds": decision.retry_after_seconds,
+            },
+        )
+
+    return await call_next(request)
 
 
 class ResolveRoleRequest(BaseModel):

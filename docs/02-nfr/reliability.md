@@ -18,7 +18,7 @@
 ## 4) Observability
 
 - Logs: structured application and security logs for booking/schedule actions.
-- Metrics: baseline implemented for API latency (`bot_api_request_latency_seconds`), request count (`bot_api_requests_total`), health (`bot_api_service_health`), and booking/schedule outcomes (`bot_api_booking_outcomes_total`).
+- Metrics: baseline implemented for API latency (`bot_api_request_latency_seconds`), request count (`bot_api_requests_total`), health (`bot_api_service_health`), booking/schedule outcomes (`bot_api_booking_outcomes_total`), and abuse-throttling outcomes (`bot_api_abuse_outcomes_total`).
 - Traces: TODO (if distributed components added beyond single service).
 - Alerts baseline:
   - `BotApiServiceDown` (`critical`): `bot_api_service_health < 1` for 2m.

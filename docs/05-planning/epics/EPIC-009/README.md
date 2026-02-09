@@ -47,3 +47,11 @@ Close remaining MVP NFR gaps for abuse protection, secrets handling, retention p
 
 - Every PR group must keep local `docker compose` workflow operational.
 - Merge method remains merge-commit per repository policy.
+
+## Delivered (Group 01)
+
+- Finalized abuse-control strategy and event contract in `docs/90-decisions/adr-0006-telegram-abuse-protection-strategy.md`.
+- Added per-user sliding-window throttling middleware for `POST /internal/telegram/*` paths.
+- Added structured deny event `abuse_throttle_deny` and abuse outcome metric `bot_api_abuse_outcomes_total`.
+- Updated architecture/NFR/delivery docs to reflect throttling behavior and metric contract.
+- Marked `T-001`, `T-002`, and `group-01` as `DONE`.

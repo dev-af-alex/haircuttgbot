@@ -50,7 +50,7 @@ A developer can run:
 3. Check API health endpoint:
    `curl -fsS http://127.0.0.1:8080/health`
 4. Check metrics endpoint and core metric families:
-   `curl -fsS http://127.0.0.1:8080/metrics | grep -E 'bot_api_service_health|bot_api_requests_total|bot_api_request_latency_seconds|bot_api_booking_outcomes_total'`
+   `curl -fsS http://127.0.0.1:8080/metrics | grep -E 'bot_api_service_health|bot_api_requests_total|bot_api_request_latency_seconds|bot_api_booking_outcomes_total|bot_api_abuse_outcomes_total'`
 5. Validate seed result (at least 2 masters):
    `docker compose exec -T postgres psql -U haircuttgbot -d haircuttgbot -c "SELECT count(*) FROM masters;"`
 6. Confirm startup structured log exists:

@@ -30,6 +30,7 @@
     - `bot_api_requests_total{method,path,status_code}` counter.
     - `bot_api_request_latency_seconds{method,path}` histogram.
     - `bot_api_booking_outcomes_total{action,outcome}` counter.
+    - `bot_api_abuse_outcomes_total{path,outcome}` counter (`allow`/`deny` for Telegram throttling checks).
 
 - `POST /internal/auth/resolve-role`
   - Purpose: resolve role by `telegram_user_id` from DB mapping.
@@ -111,6 +112,8 @@
     `{"cancelled":true,"booking_id":42,"message":"Запись успешно отменена.","notifications":[{"recipient_telegram_user_id":2000001,"message":"Ваша запись отменена."},{"recipient_telegram_user_id":1000001,"message":"Клиент отменил запись."}]}`
   - Response `200` (rejected example):
     `{"cancelled":false,"booking_id":null,"message":"Эту запись нельзя отменить.","notifications":[]}`
+  - Response `429` (abuse throttled):
+    `{"detail":"Слишком много запросов. Повторите позже.","code":"throttled","retry_after_seconds":5}`
 
 - `POST /internal/telegram/master/booking-flow/cancel`
   - Purpose: cancel master-owned active future booking with mandatory reason and participant notifications.
@@ -120,6 +123,8 @@
     `{"cancelled":true,"booking_id":42,"message":"Запись успешно отменена.","notifications":[{"recipient_telegram_user_id":2000001,"message":"Мастер отменил запись. Причина: Непредвиденные обстоятельства"},{"recipient_telegram_user_id":1000001,"message":"Запись клиента отменена."}]}`
   - Response `200` (rejected example):
     `{"cancelled":false,"booking_id":null,"message":"Укажите причину отмены.","notifications":[]}`
+  - Response `429` (abuse throttled):
+    `{"detail":"Слишком много запросов. Повторите позже.","code":"throttled","retry_after_seconds":5}`
   - Behavior notes:
     - Rejects cancellation if reason is empty/whitespace.
     - Rejects cancellation for bookings outside master ownership.
@@ -140,6 +145,8 @@
     `{"applied":true,"created":false,"block_id":101,"message":"Выходной интервал обновлен."}`
   - Response `200` (rejected example):
     `{"applied":false,"created":false,"block_id":null,"message":"Выходной интервал пересекается с существующим выходным."}`
+  - Response `429` (abuse throttled):
+    `{"detail":"Слишком много запросов. Повторите позже.","code":"throttled","retry_after_seconds":5}`
   - Behavior notes:
     - Rejects invalid interval (`start_at >= end_at`).
     - Rejects overlapping day-off intervals for the same master.
@@ -153,6 +160,8 @@
     `{"applied":true,"message":"Обеденный перерыв обновлен."}`
   - Response `200` (rejected example):
     `{"applied":false,"message":"Длительность обеда должна быть 60 минут."}`
+  - Response `429` (abuse throttled):
+    `{"detail":"Слишком много запросов. Повторите позже.","code":"throttled","retry_after_seconds":5}`
   - Behavior notes:
     - Rejects invalid interval (`lunch_start >= lunch_end`).
     - Rejects non-60-minute duration and intervals outside master work window.
@@ -166,6 +175,8 @@
     `{"applied":true,"booking_id":200,"message":"Ручная запись создана."}`
   - Response `200` (rejected example):
     `{"applied":false,"booking_id":null,"message":"Слот для ручной записи недоступен."}`
+  - Response `429` (abuse throttled):
+    `{"detail":"Слишком много запросов. Повторите позже.","code":"throttled","retry_after_seconds":5}`
   - Behavior notes:
     - Applies ownership check to target master profile.
     - Rejects overlap with active bookings, day-off blocks, and lunch interval.
@@ -187,6 +198,7 @@
   - `schedule_day_off_upsert`
   - `schedule_lunch_update`
   - `schedule_manual_booking`
+  - `abuse_throttle_deny`
 - Redaction policy:
   - Keys containing `token`, `secret`, `password`, `authorization`, `api_key`, `database_url` are replaced with `[REDACTED]`.
   - Raw `TELEGRAM_BOT_TOKEN` value is masked from any string field if present.

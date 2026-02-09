@@ -1,6 +1,6 @@
 # EPIC-009 / PR Group 01
 
-Status: TODO
+Status: DONE
 
 ## Objective
 
@@ -32,5 +32,5 @@ Ship the first mergeable abuse-protection baseline: finalize throttling decision
 
 ## Task status
 
-- T-001: TODO
-- T-002: TODO
+- T-001: DONE
+- T-002: DONE
