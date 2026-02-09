@@ -89,3 +89,13 @@ Rules:
     - Dependencies: EPIC-001, EPIC-004, EPIC-006, EPIC-007.
     - Local-run impact: local environment mirrors VM runtime layout to reduce deployment drift.
     - Delivered: Group 01 deployment contract + artifact/secrets strategy and ADR-0005 decision finalization; Group 02 deterministic deploy/rollback runbook with explicit failure triggers; Group 03 post-deploy verification checklist + operational handoff notes and closure sync.
+
+- EPIC-009 — Security and operations hardening baseline — Status: IN_PROGRESS
+    - Goal: close remaining MVP NFR gaps for abuse protection, secrets handling, retention policy, and operational SLO definitions on single-VM runtime.
+    - Acceptance:
+        - Rate-limit and abuse-control baseline is implemented and documented for Telegram-facing command paths.
+        - Secret management and TLS ingress policy are fully documented for VM runtime and reflected in delivery docs.
+        - SLO/SLI targets and retention policy are defined with alert/runbook alignment.
+    - Dependencies: EPIC-007, EPIC-008.
+    - Local-run impact: compose runtime remains stable while adding protective middleware/config and updated smoke checks for rejection scenarios.
+    - Kickoff: epic workspace initialized with first mergeable PR group and ADR stub for abuse-protection strategy.
