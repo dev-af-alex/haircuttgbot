@@ -57,3 +57,16 @@ Package and deploy the working Telegram bot stack onto one Linux VM with reprodu
   - secrets/config separation policy
 - Finalized deployment decision ADR in `docs/90-decisions/adr-0005-single-vm-deployment-rollout-strategy.md`.
 - Marked `T-001` and `group-01` as `DONE`.
+
+## Delivered (Group 02)
+
+- Implemented reproducible single-VM deploy command path in `docs/04-delivery/deploy-vm.md`:
+  - clean-VM prerequisites
+  - release upload/extract/activation commands
+  - deterministic compose startup and verification commands
+  - systemd persistence baseline
+- Implemented explicit rollback runbook with:
+  - failure triggers
+  - previous-release restore command sequence
+  - post-rollback validation and incident-note requirement
+- Marked `T-002`, `T-003`, and `group-02` as `DONE`.

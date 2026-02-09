@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines the EPIC-008 deployment contract for running the project on one Linux VM with Docker Compose. Detailed step-by-step deploy and rollback commands are completed in later EPIC-008 PR groups.
+This document defines the deployment contract and the reproducible command path for deploying and rolling back the project on one Linux VM with Docker Compose.
 
 ## VM deployment contract
 
@@ -88,3 +88,170 @@ The bundle must not include real secret values.
   - client booking success + one-active-booking rejection path
   - master schedule update path (day-off/lunch/manual booking)
 - Rollback section must define clear failure triggers and deterministic command path.
+
+## Deployment runbook (clean VM -> running stack)
+
+### Inputs
+
+- `RELEASE_ID` (example: `v2026.02.09.2`)
+- `BUNDLE` filename (example: `haircuttgbot-v2026.02.09.2.tgz`)
+- SSH target host and deploy user
+
+### 1. Prepare host packages and directories
+
+Run on VM as deploy user with sudo privileges:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y docker.io docker-compose-plugin tar curl jq
+sudo usermod -aG docker "$USER"
+
+sudo mkdir -p /opt/haircuttgbot/releases
+sudo mkdir -p /opt/haircuttgbot/shared
+sudo mkdir -p /opt/haircuttgbot/backups
+sudo chown -R "$USER":"$USER" /opt/haircuttgbot
+```
+
+Re-login once after adding the user to `docker` group.
+
+### 2. Provision runtime secrets (VM only)
+
+Create `/opt/haircuttgbot/shared/.env` from the template values:
+
+```bash
+cat >/opt/haircuttgbot/shared/.env <<'ENV'
+TELEGRAM_BOT_TOKEN=replace_me
+# Optional when defaults are overridden:
+# DATABASE_URL=postgresql+psycopg://haircuttgbot:haircuttgbot@postgres:5432/haircuttgbot
+ENV
+chmod 600 /opt/haircuttgbot/shared/.env
+```
+
+### 3. Upload and unpack the release bundle
+
+Run from operator machine:
+
+```bash
+scp "$BUNDLE" deploy@<vm-host>:/tmp/
+```
+
+Run on VM:
+
+```bash
+export RELEASE_ID="v2026.02.09.2"
+export BUNDLE="haircuttgbot-v2026.02.09.2.tgz"
+export RELEASE_DIR="/opt/haircuttgbot/releases/${RELEASE_ID}"
+
+mkdir -p "$RELEASE_DIR"
+tar -xzf "/tmp/${BUNDLE}" -C "$RELEASE_DIR"
+```
+
+### 4. Activate release and start services
+
+Run on VM:
+
+```bash
+ln -sfn "$RELEASE_DIR" /opt/haircuttgbot/current
+cd /opt/haircuttgbot/current
+
+docker compose --env-file /opt/haircuttgbot/shared/.env up -d
+docker compose --env-file /opt/haircuttgbot/shared/.env ps -a
+```
+
+Expected state:
+
+- `migrate` is `Exited (0)`.
+- `bot-api`, `postgres`, and `redis` are `healthy`.
+
+### 5. Post-deploy verification
+
+Run on VM:
+
+```bash
+curl -fsS http://127.0.0.1:8080/health
+curl -fsS http://127.0.0.1:8080/metrics | grep -E 'bot_api_service_health|bot_api_requests_total|bot_api_request_latency_seconds|bot_api_booking_outcomes_total'
+docker compose --env-file /opt/haircuttgbot/shared/.env logs bot-api --tail=50 | grep '"event": "startup"'
+```
+
+Then run the canonical smoke path from `docs/04-delivery/local-dev.md` against VM services (seed + booking/cancellation/schedule scenario).
+
+### 6. Persist on reboot (systemd)
+
+Use one-shot unit that runs compose up from `/opt/haircuttgbot/current`:
+
+```ini
+[Unit]
+Description=haircuttgbot compose runtime
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/haircuttgbot/current
+RemainAfterExit=yes
+ExecStart=/usr/bin/docker compose --env-file /opt/haircuttgbot/shared/.env up -d
+ExecStop=/usr/bin/docker compose --env-file /opt/haircuttgbot/shared/.env down
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Save as `/etc/systemd/system/haircuttgbot.service`, then:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now haircuttgbot.service
+sudo systemctl status haircuttgbot.service --no-pager
+```
+
+## Rollback runbook
+
+### Rollback triggers (must be explicit)
+
+Trigger rollback when any of the following is true after deploy:
+
+- `docker compose ps -a` shows unhealthy/failed runtime services after startup grace period.
+- `curl -fsS http://127.0.0.1:8080/health` fails.
+- Smoke scenario from `docs/04-delivery/local-dev.md` fails.
+- Critical dependency break blocks booking or schedule write paths.
+
+### Rollback command path
+
+Run on VM:
+
+```bash
+cd /opt/haircuttgbot/releases
+ls -1dt v*/ | head -n 5
+```
+
+Select previous known-good release as `PREV_RELEASE_ID`, then:
+
+```bash
+export PREV_RELEASE_ID="v2026.02.09.1"
+export PREV_DIR="/opt/haircuttgbot/releases/${PREV_RELEASE_ID}"
+
+ln -sfn "$PREV_DIR" /opt/haircuttgbot/current
+cd /opt/haircuttgbot/current
+docker compose --env-file /opt/haircuttgbot/shared/.env up -d
+docker compose --env-file /opt/haircuttgbot/shared/.env ps -a
+```
+
+### Rollback validation
+
+Run the same minimum checks as forward deploy:
+
+```bash
+curl -fsS http://127.0.0.1:8080/health
+curl -fsS http://127.0.0.1:8080/metrics | grep -E 'bot_api_service_health|bot_api_requests_total|bot_api_request_latency_seconds|bot_api_booking_outcomes_total'
+```
+
+Then execute canonical smoke checks from `docs/04-delivery/local-dev.md`.
+
+### Incident note requirement
+
+Every rollback must produce a short incident note with:
+
+- Failed release ID and timestamp (UTC).
+- Trigger condition that caused rollback.
+- Rollback operator and restored release ID.
+- Health/smoke verification result after rollback.

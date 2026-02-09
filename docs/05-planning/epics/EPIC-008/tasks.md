@@ -11,7 +11,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 1 dev-day
   - Dependencies: EPIC-001, EPIC-007
 
-- T-002 — Document deployment runbook with reproducible command path — Status: TODO
+- T-002 — Document deployment runbook with reproducible command path — Status: DONE
   - Scope: complete `docs/04-delivery/deploy-vm.md` with step-by-step deploy procedure from clean VM to running stack.
   - Acceptance:
     - runbook includes provisioning prerequisites, install commands, deploy commands, and verification steps.
@@ -19,7 +19,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 2 dev-days
   - Dependencies: T-001
 
-- T-003 — Define rollback procedure and failure triggers — Status: TODO
+- T-003 — Define rollback procedure and failure triggers — Status: DONE
   - Scope: specify rollback triggers and exact commands for returning to previous known-good deployment.
   - Acceptance:
     - rollback conditions are explicit (failed health/smoke/dependency checks).

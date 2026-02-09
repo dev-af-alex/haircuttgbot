@@ -88,4 +88,4 @@ Rules:
         - Post-deploy smoke test validates core booking and schedule operations.
     - Dependencies: EPIC-001, EPIC-004, EPIC-006, EPIC-007.
     - Local-run impact: local environment mirrors VM runtime layout to reduce deployment drift.
-    - Progress: Group 01 completed (`T-001`) with deployment contract + artifact/secrets strategy and ADR-0005 decision finalization.
+    - Progress: Group 01 completed (`T-001`) with deployment contract + artifact/secrets strategy and ADR-0005 decision finalization; Group 02 completed (`T-002`, `T-003`) with deterministic deploy/rollback runbook and explicit failure triggers.
