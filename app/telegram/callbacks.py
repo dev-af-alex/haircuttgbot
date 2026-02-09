@@ -150,6 +150,7 @@ _MENU_MASTER_CANCEL_CONFIRM = "master_cancel_confirm"
 _MENU_MASTER_ADMIN = "master_admin_menu"
 _MENU_MASTER_ADMIN_ADD_SELECT = "master_admin_add_select"
 _MENU_MASTER_ADMIN_REMOVE_SELECT = "master_admin_remove_select"
+_MENU_MASTER_ADMIN_ADD_NICKNAME_INPUT = "master_admin_add_nickname_input"
 
 _MENU_ALLOWED_ACTIONS = {
     _MENU_ROOT: {"hm", "cm", "mm"},
@@ -173,7 +174,8 @@ _MENU_ALLOWED_ACTIONS = {
     _MENU_MASTER_CANCEL_REASON_SELECT: {"hm", "mr", "mcr"},
     _MENU_MASTER_CANCEL_CONFIRM: {"hm", "mr", "mcn"},
     _MENU_MASTER_ADMIN: {"hm", "mr", "maa", "mad"},
-    _MENU_MASTER_ADMIN_ADD_SELECT: {"hm", "mr", "mau"},
+    _MENU_MASTER_ADMIN_ADD_SELECT: {"hm", "mr"},
+    _MENU_MASTER_ADMIN_ADD_NICKNAME_INPUT: {"hm", "mr"},
     _MENU_MASTER_ADMIN_REMOVE_SELECT: {"hm", "mr", "mar"},
 }
 
@@ -185,6 +187,9 @@ _MENU_TEXT = {
 }
 _START_GREETING = "Добро пожаловать в барбершоп."
 _MASTER_DISPLAY_NAME_FALLBACK = "Мастер (имя не указано)"
+_MASTER_ADMIN_ADD_NICKNAME_PROMPT = (
+    "Введите nickname пользователя для назначения мастером (формат: @nickname)."
+)
 
 _ACTION_TARGET_MENU = {
     "hm": _MENU_ROOT,
@@ -430,6 +435,55 @@ class TelegramCallbackRouter:
         if handler is None:
             return self._invalid_response(telegram_user_id=telegram_user_id)
         return handler(telegram_user_id, payload.context)
+
+    def handle_text(self, *, telegram_user_id: int, text_value: str | None) -> CallbackHandleResult | None:
+        if text_value is None:
+            return None
+        if self._state.current_menu(telegram_user_id) not in {
+            _MENU_MASTER_ADMIN_ADD_SELECT,
+            _MENU_MASTER_ADMIN_ADD_NICKNAME_INPUT,
+        }:
+            return None
+
+        if not self._is_bootstrap_master(telegram_user_id=telegram_user_id):
+            observe_master_admin_outcome("rbac", "denied")
+            emit_event(
+                "master_admin_action",
+                actor_telegram_user_id=telegram_user_id,
+                target_telegram_user_id=None,
+                action="rbac",
+                outcome="denied",
+                reason="bootstrap_only",
+            )
+            return CallbackHandleResult(
+                text=RU_MESSAGES["forbidden"],
+                reply_markup=build_menu_markup(_MENU_MASTER),
+            )
+
+        result = self._master_admin.add_master_by_nickname(raw_nickname=text_value)
+        outcome = "success" if result.applied else "rejected"
+        observe_master_admin_outcome("add", outcome)
+        emit_event(
+            "master_admin_action",
+            actor_telegram_user_id=telegram_user_id,
+            target_telegram_user_id=result.target_telegram_user_id,
+            action="add",
+            outcome=outcome,
+            reason=result.reason,
+        )
+
+        if result.applied:
+            self._state.set_menu(telegram_user_id, _MENU_MASTER_ADMIN, reset_context=True)
+            return CallbackHandleResult(
+                text=result.message,
+                reply_markup=build_menu_markup(_MENU_MASTER_ADMIN),
+            )
+
+        self._state.set_menu(telegram_user_id, _MENU_MASTER_ADMIN_ADD_NICKNAME_INPUT)
+        return CallbackHandleResult(
+            text=f"{result.message}\n{_MASTER_ADMIN_ADD_NICKNAME_PROMPT}",
+            reply_markup=build_master_admin_add_nickname_markup(),
+        )
 
     def _handle_static_menu_action(self, *, telegram_user_id: int, action: str) -> CallbackHandleResult:
         if action in {"hm", "bk"}:
@@ -1013,50 +1067,18 @@ class TelegramCallbackRouter:
         )
 
     def _handle_master_admin_add_start(self, *, telegram_user_id: int) -> CallbackHandleResult:
-        candidates = self._master_admin.list_promotable_users(limit=_MASTER_ADMIN_LIMIT)
-        if not candidates:
-            self._state.set_menu(telegram_user_id, _MENU_MASTER_ADMIN)
-            observe_master_admin_outcome("add", "rejected")
-            emit_event(
-                "master_admin_action",
-                actor_telegram_user_id=telegram_user_id,
-                target_telegram_user_id=None,
-                action="add",
-                outcome="rejected",
-                reason="no_candidates",
-            )
-            return CallbackHandleResult(
-                text="Нет пользователей для назначения мастером.",
-                reply_markup=build_menu_markup(_MENU_MASTER_ADMIN),
-            )
-
-        self._state.set_menu(telegram_user_id, _MENU_MASTER_ADMIN_ADD_SELECT)
+        self._state.set_menu(telegram_user_id, _MENU_MASTER_ADMIN_ADD_NICKNAME_INPUT)
         return CallbackHandleResult(
-            text="Выберите пользователя для назначения мастером.",
-            reply_markup=build_master_admin_add_markup(candidates),
+            text=_MASTER_ADMIN_ADD_NICKNAME_PROMPT,
+            reply_markup=build_master_admin_add_nickname_markup(),
         )
 
     def _handle_master_admin_add_apply(self, telegram_user_id: int, context: str | None) -> CallbackHandleResult:
-        if context is None:
-            return self._invalid_response(telegram_user_id=telegram_user_id)
-        try:
-            target_telegram_user_id = int(context)
-        except ValueError:
-            return self._invalid_response(telegram_user_id=telegram_user_id)
-
-        result = self._master_admin.add_master(telegram_user_id=target_telegram_user_id)
-        self._state.set_menu(telegram_user_id, _MENU_MASTER_ADMIN, reset_context=True)
-        observe_master_admin_outcome("add", "success" if result.applied else "rejected")
-        emit_event(
-            "master_admin_action",
-            actor_telegram_user_id=telegram_user_id,
-            target_telegram_user_id=result.target_telegram_user_id,
-            action="add",
-            outcome="success" if result.applied else "rejected",
-        )
+        _ = context
+        self._state.set_menu(telegram_user_id, _MENU_MASTER_ADMIN_ADD_NICKNAME_INPUT)
         return CallbackHandleResult(
-            text=result.message,
-            reply_markup=build_menu_markup(_MENU_MASTER_ADMIN),
+            text=_MASTER_ADMIN_ADD_NICKNAME_PROMPT,
+            reply_markup=build_master_admin_add_nickname_markup(),
         )
 
     def _handle_master_admin_remove_start(self, *, telegram_user_id: int) -> CallbackHandleResult:
@@ -1555,19 +1577,8 @@ def build_master_cancel_confirm_markup() -> InlineKeyboardMarkup:
     )
 
 
-def build_master_admin_add_markup(candidates: list[dict[str, object]]) -> InlineKeyboardMarkup:
-    buttons: list[InlineKeyboardButton] = []
-    for candidate in candidates:
-        telegram_user_id = candidate.get("telegram_user_id")
-        if not isinstance(telegram_user_id, int):
-            continue
-        buttons.append(
-            InlineKeyboardButton(
-                text=f"tg:{telegram_user_id}",
-                callback_data=encode_callback_data(action="mau", context=str(telegram_user_id)),
-            )
-        )
-    rows = chunk_inline_buttons(buttons, max_per_row=MOBILE_MENU_MAX_BUTTONS_PER_ROW)
+def build_master_admin_add_nickname_markup() -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
     rows.extend(_back_and_home_rows(action_back="mr"))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 

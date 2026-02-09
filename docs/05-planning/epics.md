@@ -185,7 +185,7 @@ Rules:
     - Local-run impact: Telegram validation steps in local/VM runbooks shift to role-direct start behavior and updated text assertions.
     - Delivered: Group 01 role-direct `/start` greeting flow + accepted ADR-0014 identity policy; Group 02 master display-name rollout in client selection/confirmation paths with deterministic fallback; Group 03 regression expansion and local/VM runbook synchronization for role-direct start and text contracts.
 
-- EPIC-018 — Manual master assignment by Telegram nickname (`@...`) — Status: IN_PROGRESS
+- EPIC-018 — Manual master assignment by Telegram nickname (`@...`) — Status: DONE
     - Goal: change bootstrap-master administration flow so master assignment is performed by explicit nickname input, not by selecting existing bot users.
     - Acceptance:
         - In `Управление мастерами` add-master flow accepts only manual nickname input starting with `@` and rejects invalid formats.
@@ -194,3 +194,4 @@ Rules:
         - Regression and smoke coverage include success and validation-failure scenarios for nickname-based assignment.
     - Dependencies: EPIC-013, EPIC-017.
     - Local-run impact: local/VM smoke updates bootstrap-master add flow to nickname-first input path and validation checks.
+    - Delivered: Group 01 accepted ADR-0015 nickname-resolution policy plus manual nickname-input state and validation baseline; Group 02 delivered nickname-based add-master service/callback integration with bootstrap RBAC and audit reason outcomes preserved; Group 03 delivered regression coverage for success/invalid/unknown/ambiguous nickname paths and synchronized local/VM smoke runbooks.

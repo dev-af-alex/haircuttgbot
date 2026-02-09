@@ -12,9 +12,9 @@ Finalize EPIC-018 with regression hardening and delivery-doc synchronization for
 
 ## Tasks included
 
-- T-007 Expand regression coverage for nickname assignment - TODO.
-- T-008 Synchronize local/VM smoke docs for nickname flow - TODO.
-- T-009 Epic closure and checklist/doc-sync prep - TODO.
+- T-007 Expand regression coverage for nickname assignment - DONE.
+- T-008 Synchronize local/VM smoke docs for nickname flow - DONE.
+- T-009 Epic closure and checklist/doc-sync prep - DONE.
 
 ## Mergeability and local-run guardrails
 
@@ -41,4 +41,5 @@ curl -fsS http://127.0.0.1:8080/health
 
 ## Group status
 
-Status: TODO
+Status: DONE
+Completed at: 2026-02-09

@@ -1,7 +1,7 @@
 # ADR-0015: Master assignment by Telegram nickname resolution policy
 
 Date: 2026-02-09
-Status: Proposed
+Status: Accepted
 Deciders: TBD
 
 ## Context
@@ -17,17 +17,16 @@ Without one policy, operator feedback and add-master outcomes can be inconsisten
 
 ## Decision
 
-Proposed policy (to finalize in implementation):
-
-- Accept only manual nickname input starting with `@` and matching bounded allowed characters.
-- Normalize input before resolution (for example, trim spaces and canonicalize case strategy).
-- Resolve against current known Telegram identity mapping source.
-- Return deterministic localized outcomes:
-  - success (master assigned);
-  - invalid format;
-  - unknown nickname;
-  - ambiguous nickname.
-- Keep bootstrap-only RBAC and existing master-admin audit/metric events mandatory for this path.
+- Accept only manual nickname input in format `@nickname`.
+- Validation rule: body after `@` must match `[A-Za-z0-9_]{5,32}`.
+- Normalize input by trimming spaces and lowercasing nickname body before lookup.
+- Resolve nickname via `users.telegram_username` (case-insensitive exact match on normalized value).
+- Deterministic outcome policy:
+  - `invalid_nickname_format`: input does not match required format;
+  - `nickname_not_found`: no users match normalized nickname;
+  - `nickname_ambiguous`: more than one user matches normalized nickname;
+  - success path: exactly one matching user, then existing add-master apply path executes.
+- Keep bootstrap-only RBAC and existing master-admin observability events with explicit `reason` codes for nickname outcomes.
 
 ## Alternatives considered
 
@@ -52,6 +51,5 @@ Negative:
 
 Follow-up actions:
 
-- Finalize validation regex and normalization behavior.
 - Add regression tests for all resolution outcomes.
 - Synchronize local/VM smoke steps for nickname-first bootstrap flow.

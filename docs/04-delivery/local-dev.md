@@ -108,7 +108,11 @@ Use this sequence when validating aiogram runtime against a real Telegram chat.
      - for an occupied date, `Выходной день` returns rejection text about existing active bookings.
 9. Optional bootstrap-master administration validation (same master account as `BOOTSTRAP_MASTER_TELEGRAM_ID`):
    - in `Мастер` menu open `Управление мастерами`;
-   - run `Добавить мастера` for one client user and check success message;
+   - ensure target client has nickname in DB (replace `TARGET_TG_ID`, value must be lowercase without `@`):
+     - `docker compose exec -T postgres psql -U haircuttgbot -d haircuttgbot -c "UPDATE users SET telegram_username='candidate_master' WHERE telegram_user_id=TARGET_TG_ID;"`
+   - run `Добавить мастера`, send message `@candidate_master`, and check success message;
+   - retry with invalid value (`candidate_master`) and check deterministic format rejection;
+   - retry with unknown nickname (`@unknown_user`) and check deterministic not-found rejection;
    - run `Удалить мастера` for the same user and check success message;
    - from non-bootstrap master account confirm deny response for admin actions.
 10. Stop stack:

@@ -316,3 +316,27 @@ async def callback_router(callback: CallbackQuery) -> None:
         notifications=result.notifications,
         sender_telegram_user_id=callback.from_user.id,
     )
+
+
+@router.message()
+async def text_router(message: Message) -> None:
+    if message.from_user is None:
+        return
+    if not isinstance(message.text, str):
+        return
+    if message.text.strip().startswith("/"):
+        return
+
+    result = _callbacks().handle_text(
+        telegram_user_id=message.from_user.id,
+        text_value=message.text,
+    )
+    if result is None:
+        return
+
+    await _reply_with_notifications(
+        message=message,
+        text=result.text,
+        notifications=result.notifications,
+        reply_markup=result.reply_markup,
+    )

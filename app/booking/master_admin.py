@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import time
 
@@ -10,6 +11,7 @@ _MASTER_WORK_START = time(10, 0)
 _MASTER_WORK_END = time(21, 0)
 _MASTER_LUNCH_START = time(13, 0)
 _MASTER_LUNCH_END = time(14, 0)
+_TELEGRAM_NICKNAME_PATTERN = re.compile(r"^[A-Za-z0-9_]{5,32}$")
 
 
 @dataclass(frozen=True)
@@ -17,6 +19,7 @@ class MasterAdminResult:
     applied: bool
     message: str
     target_telegram_user_id: int | None
+    reason: str | None = None
 
 
 class MasterAdminService:
@@ -82,6 +85,7 @@ class MasterAdminService:
                     applied=False,
                     message="Роль Master не найдена. Выполните миграции и seed.",
                     target_telegram_user_id=telegram_user_id,
+                    reason="master_role_missing",
                 )
 
             user = conn.execute(
@@ -168,6 +172,7 @@ class MasterAdminService:
                     applied=True,
                     message=f"Мастер {telegram_user_id} добавлен.",
                     target_telegram_user_id=telegram_user_id,
+                    reason="added",
                 )
 
             if bool(master["is_active"]):
@@ -175,6 +180,7 @@ class MasterAdminService:
                     applied=True,
                     message=f"Мастер {telegram_user_id} уже активен.",
                     target_telegram_user_id=telegram_user_id,
+                    reason="already_active",
                 )
 
             conn.execute(
@@ -191,7 +197,58 @@ class MasterAdminService:
                 applied=True,
                 message=f"Мастер {telegram_user_id} добавлен.",
                 target_telegram_user_id=telegram_user_id,
+                reason="reactivated",
             )
+
+    def add_master_by_nickname(self, *, raw_nickname: str) -> MasterAdminResult:
+        normalized_nickname = normalize_telegram_nickname(raw_nickname)
+        if normalized_nickname is None:
+            return MasterAdminResult(
+                applied=False,
+                message="Неверный формат nickname. Используйте @nickname (латиница, цифры, подчёркивание).",
+                target_telegram_user_id=None,
+                reason="invalid_nickname_format",
+            )
+
+        with self._engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    """
+                    SELECT telegram_user_id
+                    FROM users
+                    WHERE telegram_username IS NOT NULL
+                      AND lower(telegram_username) = :normalized_nickname
+                    ORDER BY telegram_user_id
+                    LIMIT 2
+                    """
+                ),
+                {"normalized_nickname": normalized_nickname},
+            ).all()
+
+        if not rows:
+            return MasterAdminResult(
+                applied=False,
+                message=f"Пользователь с nickname @{normalized_nickname} не найден.",
+                target_telegram_user_id=None,
+                reason="nickname_not_found",
+            )
+
+        if len(rows) > 1:
+            return MasterAdminResult(
+                applied=False,
+                message=f"Nickname @{normalized_nickname} неоднозначен. Обратитесь к администратору.",
+                target_telegram_user_id=None,
+                reason="nickname_ambiguous",
+            )
+
+        target_telegram_user_id = int(rows[0][0])
+        base_result = self.add_master(telegram_user_id=target_telegram_user_id)
+        return MasterAdminResult(
+            applied=base_result.applied,
+            message=f"{base_result.message} (nickname: @{normalized_nickname})",
+            target_telegram_user_id=target_telegram_user_id,
+            reason=base_result.reason,
+        )
 
     def remove_master(
         self,
@@ -204,6 +261,7 @@ class MasterAdminService:
                 applied=False,
                 message="Нельзя удалить bootstrap-мастера.",
                 target_telegram_user_id=telegram_user_id,
+                reason="bootstrap_blocked",
             )
 
         with self._engine.begin() as conn:
@@ -224,6 +282,7 @@ class MasterAdminService:
                     applied=False,
                     message="Мастер не найден.",
                     target_telegram_user_id=telegram_user_id,
+                    reason="master_not_found",
                 )
 
             if not bool(row["is_active"]):
@@ -231,6 +290,7 @@ class MasterAdminService:
                     applied=True,
                     message=f"Мастер {telegram_user_id} уже неактивен.",
                     target_telegram_user_id=telegram_user_id,
+                    reason="already_inactive",
                 )
 
             conn.execute(
@@ -247,4 +307,16 @@ class MasterAdminService:
                 applied=True,
                 message=f"Мастер {telegram_user_id} удален из активных.",
                 target_telegram_user_id=telegram_user_id,
+                reason="deactivated",
             )
+
+
+def normalize_telegram_nickname(raw_nickname: str | None) -> str | None:
+    candidate = (raw_nickname or "").strip()
+    if not candidate.startswith("@"):
+        return None
+
+    body = candidate[1:].strip()
+    if not _TELEGRAM_NICKNAME_PATTERN.fullmatch(body):
+        return None
+    return body.lower()

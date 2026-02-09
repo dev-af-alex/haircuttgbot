@@ -22,6 +22,7 @@ def _setup_schema() -> Engine:
                 CREATE TABLE users (
                     id INTEGER PRIMARY KEY,
                     telegram_user_id BIGINT UNIQUE NOT NULL,
+                    telegram_username TEXT,
                     role_id INTEGER NOT NULL
                 )
                 """
@@ -47,12 +48,12 @@ def _setup_schema() -> Engine:
         conn.execute(
             text(
                 """
-                INSERT INTO users (id, telegram_user_id, role_id)
+                INSERT INTO users (id, telegram_user_id, telegram_username, role_id)
                 VALUES
-                    (10, 1000001, 2),
-                    (11, 1000002, 2),
-                    (20, 2000001, 1),
-                    (21, 2000002, 1)
+                    (10, 1000001, 'owner_master', 2),
+                    (11, 1000002, 'worker_master', 2),
+                    (20, 2000001, 'client_a', 1),
+                    (21, 2000002, 'new_master_candidate', 1)
                 """
             )
         )
@@ -104,6 +105,41 @@ def test_add_master_is_idempotent_and_updates_role() -> None:
             )
         ).scalar_one()
         assert masters_count == 1
+
+
+def test_add_master_by_nickname_handles_success_unknown_and_ambiguous() -> None:
+    engine = _setup_schema()
+    service = MasterAdminService(engine)
+
+    success = service.add_master_by_nickname(raw_nickname="@new_master_candidate")
+    assert success.applied is True
+    assert success.target_telegram_user_id == 2000002
+    assert success.reason in {"added", "already_active", "reactivated"}
+
+    unknown = service.add_master_by_nickname(raw_nickname="@unknown_nick")
+    assert unknown.applied is False
+    assert unknown.reason == "nickname_not_found"
+
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO users (id, telegram_user_id, telegram_username, role_id)
+                VALUES (31, 2000003, 'dupe_nick', 1), (32, 2000004, 'dupe_nick', 1)
+                """
+            )
+        )
+    ambiguous = service.add_master_by_nickname(raw_nickname="@dupe_nick")
+    assert ambiguous.applied is False
+    assert ambiguous.reason == "nickname_ambiguous"
+
+
+def test_add_master_by_nickname_rejects_invalid_format() -> None:
+    service = MasterAdminService(_setup_schema())
+
+    invalid = service.add_master_by_nickname(raw_nickname="not_a_nickname")
+    assert invalid.applied is False
+    assert invalid.reason == "invalid_nickname_format"
 
 
 def test_remove_master_blocks_bootstrap_and_soft_deactivates() -> None:

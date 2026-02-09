@@ -42,6 +42,8 @@ def _secondary_demo_master_telegram_id(bootstrap_master_telegram_id: int) -> int
 def run_seed(database_url: str, *, bootstrap_master_telegram_id: int) -> None:
     engine = create_engine(database_url, future=True)
     demo_master_telegram_id = _secondary_demo_master_telegram_id(bootstrap_master_telegram_id)
+    bootstrap_master_username = f"master_{bootstrap_master_telegram_id}"
+    demo_master_username = f"master_{demo_master_telegram_id}"
     service_catalog = list_service_catalog_defaults()
 
     with engine.begin() as conn:
@@ -58,25 +60,41 @@ def run_seed(database_url: str, *, bootstrap_master_telegram_id: int) -> None:
         conn.execute(
             text(
                 """
-                INSERT INTO users (telegram_user_id, role_id)
-                VALUES (:bootstrap_master_telegram_id, (SELECT id FROM roles WHERE name = 'Master'))
+                INSERT INTO users (telegram_user_id, telegram_username, role_id)
+                VALUES (
+                    :bootstrap_master_telegram_id,
+                    :bootstrap_master_username,
+                    (SELECT id FROM roles WHERE name = 'Master')
+                )
                 ON CONFLICT (telegram_user_id) DO UPDATE
-                    SET role_id = EXCLUDED.role_id
+                    SET role_id = EXCLUDED.role_id,
+                        telegram_username = COALESCE(users.telegram_username, EXCLUDED.telegram_username)
                 """
             ),
-            {"bootstrap_master_telegram_id": bootstrap_master_telegram_id},
+            {
+                "bootstrap_master_telegram_id": bootstrap_master_telegram_id,
+                "bootstrap_master_username": bootstrap_master_username,
+            },
         )
 
         conn.execute(
             text(
                 """
-                INSERT INTO users (telegram_user_id, role_id)
-                VALUES (:demo_master_telegram_id, (SELECT id FROM roles WHERE name = 'Master'))
+                INSERT INTO users (telegram_user_id, telegram_username, role_id)
+                VALUES (
+                    :demo_master_telegram_id,
+                    :demo_master_username,
+                    (SELECT id FROM roles WHERE name = 'Master')
+                )
                 ON CONFLICT (telegram_user_id) DO UPDATE
-                    SET role_id = EXCLUDED.role_id
+                    SET role_id = EXCLUDED.role_id,
+                        telegram_username = COALESCE(users.telegram_username, EXCLUDED.telegram_username)
                 """
             ),
-            {"demo_master_telegram_id": demo_master_telegram_id},
+            {
+                "demo_master_telegram_id": demo_master_telegram_id,
+                "demo_master_username": demo_master_username,
+            },
         )
 
         conn.execute(

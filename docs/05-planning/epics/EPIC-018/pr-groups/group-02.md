@@ -13,9 +13,9 @@ Deliver production add-master behavior based on manual `@nickname` input while p
 
 ## Tasks included
 
-- T-004 Implement nickname-based master assignment service path - TODO.
-- T-005 Wire Telegram admin add flow to manual nickname path - TODO.
-- T-006 Preserve remove-master and backward compatibility checks - TODO.
+- T-004 Implement nickname-based master assignment service path - DONE.
+- T-005 Wire Telegram admin add flow to manual nickname path - DONE.
+- T-006 Preserve remove-master and backward compatibility checks - DONE.
 
 ## Mergeability and local-run guardrails
 
@@ -42,4 +42,5 @@ curl -fsS http://127.0.0.1:8080/health
 
 ## Group status
 
-Status: TODO
+Status: DONE
+Completed at: 2026-02-09

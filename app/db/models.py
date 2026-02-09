@@ -28,6 +28,7 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     telegram_user_id: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False)
+    telegram_username: Mapped[str | None] = mapped_column(String(64), nullable=True)
     role_id: Mapped[int] = mapped_column(ForeignKey("roles.id"), nullable=False)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 

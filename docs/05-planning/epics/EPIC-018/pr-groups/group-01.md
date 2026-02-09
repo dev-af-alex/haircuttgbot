@@ -13,9 +13,9 @@ Establish mergeable policy and interaction foundation for nickname-based master 
 
 ## Tasks included
 
-- T-001 Finalize nickname-resolution ADR - TODO.
-- T-002 Add callback state for manual nickname input - TODO.
-- T-003 Implement nickname input validation and localized errors - TODO.
+- T-001 Finalize nickname-resolution ADR - DONE.
+- T-002 Add callback state for manual nickname input - DONE.
+- T-003 Implement nickname input validation and localized errors - DONE.
 
 ## Mergeability and local-run guardrails
 
@@ -42,4 +42,5 @@ curl -fsS http://127.0.0.1:8080/health
 
 ## Group status
 
-Status: TODO
+Status: DONE
+Completed at: 2026-02-09

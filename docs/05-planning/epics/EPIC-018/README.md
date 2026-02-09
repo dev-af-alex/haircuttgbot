@@ -1,6 +1,6 @@
 # EPIC-018 — Manual master assignment by Telegram nickname (`@...`)
 
-Status: IN_PROGRESS
+Status: DONE
 Owner: TBD
 Last updated: 2026-02-09
 
@@ -65,3 +65,14 @@ Replace bootstrap-master add flow based on selecting existing users with manual 
 - Epic docs (`README`, `tasks`, `pr-groups`) are status-aligned and synchronized.
 - ADR decision for nickname resolution policy is accepted and linked.
 - CI security gates (Bandit, pip-audit, Gitleaks) remain passing on PRs.
+
+## Close-out validation
+
+- Task matrix complete: `T-001`..`T-009` marked `DONE` in `tasks.md`.
+- PR groups complete: `group-01`, `group-02`, and `group-03` marked `DONE`.
+- Local verification completed during implementation:
+  - `.venv/bin/pytest -q` -> `81 passed`.
+  - smoke-aligned suite from `docs/04-delivery/local-dev.md` -> `48 passed`.
+  - `docker compose up -d --build`, health/metrics/seed/startup-log smoke commands -> passed.
+- Intentional deviation at close step:
+  - CI status (including Bandit, pip-audit, Gitleaks) is not executed in this local close workflow; enforce in PR pipeline before merge.

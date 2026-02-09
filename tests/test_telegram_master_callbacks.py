@@ -24,6 +24,7 @@ def _setup_flow_schema() -> Engine:
                 CREATE TABLE users (
                     id INTEGER PRIMARY KEY,
                     telegram_user_id BIGINT UNIQUE NOT NULL,
+                    telegram_username TEXT,
                     role_id INTEGER NOT NULL
                 )
                 """
@@ -92,12 +93,12 @@ def _setup_flow_schema() -> Engine:
         conn.execute(
             text(
                 """
-                INSERT INTO users (id, telegram_user_id, role_id)
+                INSERT INTO users (id, telegram_user_id, telegram_username, role_id)
                 VALUES
-                    (10, 1000001, 2),
-                    (11, 1000002, 2),
-                    (20, 2000001, 1),
-                    (21, 2000002, 1)
+                    (10, 1000001, 'owner_master', 2),
+                    (11, 1000002, 'worker_master', 2),
+                    (20, 2000001, 'client_a', 1),
+                    (21, 2000002, 'candidate_master', 1)
                 """
             )
         )
@@ -293,12 +294,10 @@ def test_bootstrap_master_can_add_and_remove_other_masters() -> None:
     assert "Управление мастерами" in result.text
 
     result = router.handle(telegram_user_id=1000001, data="hb1|maa")
-    add_callbacks = _callbacks_for_action(result.reply_markup, "mau")
-    assert add_callbacks
+    assert "@nickname" in result.text
 
-    add_target = [item for item in add_callbacks if item.endswith("|2000002")]
-    assert add_target
-    result = router.handle(telegram_user_id=1000001, data=add_target[0])
+    result = router.handle_text(telegram_user_id=1000001, text_value="@candidate_master")
+    assert result is not None
     assert "добавлен" in result.text.lower() or "активен" in result.text.lower()
 
     with engine.begin() as conn:
@@ -383,6 +382,37 @@ def test_master_and_admin_keyboards_keep_mobile_friendly_rows() -> None:
     assert max(admin_menu_row_sizes) <= 2
 
     result = router.handle(telegram_user_id=1000001, data="hb1|maa")
-    add_row_sizes = [len(row) for row in result.reply_markup.inline_keyboard[:-1]]
+    add_row_sizes = [len(row) for row in result.reply_markup.inline_keyboard]
     assert add_row_sizes
     assert max(add_row_sizes) <= 2
+
+
+def test_bootstrap_master_add_by_nickname_rejects_invalid_unknown_and_ambiguous() -> None:
+    engine = _setup_flow_schema()
+    router = TelegramCallbackRouter(engine, bootstrap_master_telegram_user_id=1000001)
+    router.seed_root_menu(telegram_user_id=1000001)
+
+    router.handle(telegram_user_id=1000001, data="hb1|mm")
+    router.handle(telegram_user_id=1000001, data="hb1|mam")
+    router.handle(telegram_user_id=1000001, data="hb1|maa")
+
+    invalid = router.handle_text(telegram_user_id=1000001, text_value="candidate_master")
+    assert invalid is not None
+    assert "неверный формат" in invalid.text.lower()
+
+    unknown = router.handle_text(telegram_user_id=1000001, text_value="@unknown_user")
+    assert unknown is not None
+    assert "не найден" in unknown.text.lower()
+
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO users (id, telegram_user_id, telegram_username, role_id)
+                VALUES (31, 2000003, 'dup_nick', 1), (32, 2000004, 'dup_nick', 1)
+                """
+            )
+        )
+    ambiguous = router.handle_text(telegram_user_id=1000001, text_value="@dup_nick")
+    assert ambiguous is not None
+    assert "неоднознач" in ambiguous.text.lower()

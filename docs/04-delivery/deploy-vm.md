@@ -200,7 +200,7 @@ When Telegram token is configured, additionally validate button-first chat flows
 - `Client` same-day guardrail: if now is `15:00`, slots earlier than `15:30` are not available/confirmable.
 - `Master`: `/start` shows greeting and opens `Меню мастера` directly, then schedule view + day-off + lunch update + manual booking + cancellation with reason via buttons; schedule view first requires date selection and outputs should use readable labels (`DD.MM.YYYY HH:MM`, `HH:MM-HH:MM`).
 - `Master` day-off guardrail: on date with active bookings, day-off action returns deterministic rejection about existing bookings.
-- `Bootstrap master`: `Управление мастерами` -> add one master -> remove same master.
+- `Bootstrap master`: `Управление мастерами` -> set target user's `users.telegram_username` -> add by `@nickname` (plus invalid/unknown rejection checks) -> remove same master.
 
 ### 6. Persist on reboot (systemd)
 

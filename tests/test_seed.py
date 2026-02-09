@@ -35,6 +35,7 @@ def test_run_seed_idempotency_with_file_backed_sqlite(tmp_path) -> None:
                 CREATE TABLE users (
                     id INTEGER PRIMARY KEY,
                     telegram_user_id BIGINT UNIQUE NOT NULL,
+                    telegram_username TEXT,
                     role_id INTEGER NOT NULL
                 )
                 """
@@ -70,7 +71,7 @@ def test_run_seed_idempotency_with_file_backed_sqlite(tmp_path) -> None:
             )
         )
         conn.execute(text("INSERT INTO roles (id, name) VALUES (1, 'Client')"))
-        conn.execute(text("INSERT INTO users (telegram_user_id, role_id) VALUES (1000001, 1)"))
+        conn.execute(text("INSERT INTO users (telegram_user_id, telegram_username, role_id) VALUES (1000001, NULL, 1)"))
 
     run_seed(database_url, bootstrap_master_telegram_id=1000001)
     run_seed(database_url, bootstrap_master_telegram_id=1000001)
@@ -102,6 +103,11 @@ def test_run_seed_idempotency_with_file_backed_sqlite(tmp_path) -> None:
             )
         ).scalar_one()
         assert bootstrap_master_name == "Master Owner"
+
+        bootstrap_username = conn.execute(
+            text("SELECT telegram_username FROM users WHERE telegram_user_id = 1000001")
+        ).scalar_one()
+        assert bootstrap_username == "master_1000001"
 
         service_rows = conn.execute(
             text(
