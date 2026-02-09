@@ -305,3 +305,8 @@ async def callback_router(callback: CallbackQuery) -> None:
     if callback.message is None:
         return
     await callback.message.answer(result.text, reply_markup=result.reply_markup)
+    await _send_notifications(
+        bot=callback.bot,
+        notifications=result.notifications,
+        sender_telegram_user_id=callback.from_user.id,
+    )

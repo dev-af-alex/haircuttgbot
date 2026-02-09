@@ -36,6 +36,17 @@ Actions (group-01):
 - `mm` -> open master menu scaffold (requires RBAC `master:schedule`)
 - `bk` -> back to root menu
 
+Actions (group-02, client flow):
+- `cb` -> start booking flow, show master list
+- `csm|<master_id>` -> select master and show service list
+- `css|<service_code>` -> select service and show date list
+- `csd|<YYYYMMDD>` -> select date and show available slots
+- `csl|<YYYYMMDDHHMM>` -> select slot and open confirm step
+- `ccf` -> confirm booking
+- `cc` -> show cancellable active bookings
+- `cci|<booking_id>` -> open cancellation confirmation
+- `ccn|<booking_id>` -> confirm cancellation
+
 Backward compatibility strategy:
 - Existing slash-command handlers remain available during EPIC-012 rollout.
 - Callback parser is versioned by prefix (`hb1`) so future formats can coexist.
@@ -47,6 +58,7 @@ Backward compatibility strategy:
 - If action is not allowed for current state, response is deterministic stale reply:
   - `Кнопка устарела. Откройте актуальное меню через /start.`
 - Stale events are logged as `telegram_callback_stale`.
+- Client flow context (`master_id`, `service_type`, `slot_token`) is required on dependent steps; missing context is treated as stale interaction.
 
 ## Invalid action rules
 

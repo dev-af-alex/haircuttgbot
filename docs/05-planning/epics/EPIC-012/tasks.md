@@ -22,7 +22,7 @@ Legend:
   - Dependencies: T-001
   - PR group: group-01
 
-- T-003 (M) - Implement Client interactive booking flow - Status: TODO
+- T-003 (M) - Implement Client interactive booking flow - Status: DONE
   - Output: button-first client flow (master -> service -> date/time -> confirm/cancel) reusing existing booking services.
   - Acceptance checks:
     - Client booking create/cancel works without `/` commands.
