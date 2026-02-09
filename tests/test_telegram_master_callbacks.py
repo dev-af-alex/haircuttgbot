@@ -210,6 +210,15 @@ def test_master_interactive_schedule_dayoff_lunch_manual_flow() -> None:
     assert re.search(r"\d{2}:\d{2}-\d{2}:\d{2}", result.text)
 
 
+def test_start_menu_lands_master_directly_with_greeting() -> None:
+    router = TelegramCallbackRouter(_setup_flow_schema())
+
+    result = router.start_menu(telegram_user_id=1000001)
+
+    assert "Добро пожаловать в барбершоп." in result.text
+    assert "Меню мастера" in result.text
+
+
 def test_master_day_off_rejects_occupied_date() -> None:
     engine = _setup_flow_schema()
     router = TelegramCallbackRouter(engine)
@@ -358,13 +367,13 @@ def test_master_and_admin_keyboards_keep_mobile_friendly_rows() -> None:
     assert max(master_menu_row_sizes) <= 2
 
     result = router.handle(telegram_user_id=1000001, data="hb1|msb")
-    service_row_sizes = [len(row) for row in result.reply_markup.inline_keyboard[:-2]]
+    service_row_sizes = [len(row) for row in result.reply_markup.inline_keyboard[:-1]]
     assert service_row_sizes
     assert max(service_row_sizes) <= 2
 
     router.handle(telegram_user_id=1000001, data="hb1|mr")
     result = router.handle(telegram_user_id=1000001, data="hb1|mlm")
-    lunch_row_sizes = [len(row) for row in result.reply_markup.inline_keyboard[:-2]]
+    lunch_row_sizes = [len(row) for row in result.reply_markup.inline_keyboard[:-1]]
     assert lunch_row_sizes
     assert max(lunch_row_sizes) <= 2
 
@@ -374,6 +383,6 @@ def test_master_and_admin_keyboards_keep_mobile_friendly_rows() -> None:
     assert max(admin_menu_row_sizes) <= 2
 
     result = router.handle(telegram_user_id=1000001, data="hb1|maa")
-    add_row_sizes = [len(row) for row in result.reply_markup.inline_keyboard[:-2]]
+    add_row_sizes = [len(row) for row in result.reply_markup.inline_keyboard[:-1]]
     assert add_row_sizes
     assert max(add_row_sizes) <= 2

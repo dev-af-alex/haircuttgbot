@@ -107,6 +107,7 @@ def test_client_flow_commands_are_role_protected() -> None:
     allowed = service.client_start(telegram_user_id=2000001)
     assert "Выберите мастера." in allowed.text
     assert "Master Demo 1" in allowed.text
+    assert "1: Master Demo 1" not in allowed.text
 
 
 def test_client_book_and_cancel_mapping_returns_notifications() -> None:

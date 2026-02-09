@@ -61,7 +61,7 @@ class TelegramCommandService:
         masters = response.get("masters", [])
         lines = [str(response.get("message", ""))]
         for master in masters:
-            lines.append(f"- {master['id']}: {master['display_name']}")
+            lines.append(f"- {master['display_name']}")
         return TelegramCommandResult(text="\n".join(lines).strip(), notifications=[])
 
     def client_select_master(self, *, telegram_user_id: int, master_id: int) -> TelegramCommandResult:
@@ -235,4 +235,3 @@ def _coerce_notifications(value: object) -> list[dict[str, object]]:
             }
         )
     return notifications
-

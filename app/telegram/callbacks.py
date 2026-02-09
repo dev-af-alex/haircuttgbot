@@ -178,11 +178,13 @@ _MENU_ALLOWED_ACTIONS = {
 }
 
 _MENU_TEXT = {
-    _MENU_ROOT: "Главное меню. Выберите раздел.",
+    _MENU_ROOT: "Выберите раздел.",
     _MENU_CLIENT: "Меню клиента. Выберите действие.",
     _MENU_MASTER: "Меню мастера. Выберите действие.",
     _MENU_MASTER_ADMIN: "Управление мастерами. Выберите действие.",
 }
+_START_GREETING = "Добро пожаловать в барбершоп."
+_MASTER_DISPLAY_NAME_FALLBACK = "Мастер (имя не указано)"
 
 _ACTION_TARGET_MENU = {
     "hm": _MENU_ROOT,
@@ -299,6 +301,26 @@ class TelegramCallbackRouter:
     def seed_root_menu(self, telegram_user_id: int) -> None:
         self._state.set_menu(telegram_user_id, _MENU_ROOT, reset_context=True)
 
+    def start_menu(self, *, telegram_user_id: int) -> CallbackHandleResult:
+        role = self._roles.resolve_role(telegram_user_id)
+        if role == "Client":
+            self._state.set_menu(telegram_user_id, _MENU_CLIENT, reset_context=True)
+            return CallbackHandleResult(
+                text=f"{_START_GREETING}\n{_MENU_TEXT[_MENU_CLIENT]}",
+                reply_markup=build_menu_markup(_MENU_CLIENT),
+            )
+        if role == "Master":
+            self._state.set_menu(telegram_user_id, _MENU_MASTER, reset_context=True)
+            return CallbackHandleResult(
+                text=f"{_START_GREETING}\n{_MENU_TEXT[_MENU_MASTER]}",
+                reply_markup=build_menu_markup(_MENU_MASTER),
+            )
+        self._state.set_menu(telegram_user_id, _MENU_ROOT, reset_context=True)
+        return CallbackHandleResult(
+            text=RU_MESSAGES["unknown_user"],
+            reply_markup=build_root_menu_markup(),
+        )
+
     def handle(self, *, telegram_user_id: int, data: str | None) -> CallbackHandleResult:
         payload, error_code = decode_callback_data(data)
         if payload is None:
@@ -307,7 +329,7 @@ class TelegramCallbackRouter:
                 telegram_user_id=telegram_user_id,
                 reason=error_code,
             )
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
 
         role = self._roles.resolve_role(telegram_user_id)
         if role is None:
@@ -336,7 +358,7 @@ class TelegramCallbackRouter:
                 )
                 return CallbackHandleResult(
                     text=decision.message,
-                    reply_markup=build_root_menu_markup(),
+                    reply_markup=self._default_markup_for_role(role),
                 )
 
         if payload.action in {"mam", "maa", "mau", "mad", "mar"} and not self._is_bootstrap_master(
@@ -370,7 +392,7 @@ class TelegramCallbackRouter:
                 action=payload.action,
                 menu=self._state.current_menu(telegram_user_id),
             )
-            return self._stale_response()
+            return self._stale_response(telegram_user_id=telegram_user_id)
 
         if payload.action in _ACTION_TARGET_MENU:
             return self._handle_static_menu_action(telegram_user_id=telegram_user_id, action=payload.action)
@@ -406,10 +428,12 @@ class TelegramCallbackRouter:
         }
         handler = handlers.get(payload.action)
         if handler is None:
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
         return handler(telegram_user_id, payload.context)
 
     def _handle_static_menu_action(self, *, telegram_user_id: int, action: str) -> CallbackHandleResult:
+        if action in {"hm", "bk"}:
+            return self.start_menu(telegram_user_id=telegram_user_id)
         target_menu = _ACTION_TARGET_MENU[action]
         reset_context = target_menu in {_MENU_ROOT, _MENU_MASTER, _MENU_MASTER_ADMIN}
         self._state.set_menu(telegram_user_id, target_menu, reset_context=reset_context)
@@ -436,11 +460,11 @@ class TelegramCallbackRouter:
 
     def _handle_client_select_master(self, telegram_user_id: int, context: str | None) -> CallbackHandleResult:
         if context is None:
-            return self._stale_response()
+            return self._stale_response(telegram_user_id=telegram_user_id)
         try:
             master_id = int(context)
         except ValueError:
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
 
         response = self._flow.select_master(master_id)
         service_options = response.get("service_options", [])
@@ -452,6 +476,7 @@ class TelegramCallbackRouter:
             )
 
         self._state.set_context_value(telegram_user_id, "master_id", str(master_id))
+        self._state.set_context_value(telegram_user_id, "master_name", self._resolve_master_display_name(master_id))
         self._state.set_menu(telegram_user_id, _MENU_CLIENT_SERVICE_SELECT)
         return CallbackHandleResult(
             text=str(response.get("message", "Выберите услугу.")),
@@ -460,9 +485,9 @@ class TelegramCallbackRouter:
 
     def _handle_client_select_service(self, telegram_user_id: int, context: str | None) -> CallbackHandleResult:
         if context is None or context not in SERVICE_OPTION_LABELS_RU:
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
         if self._state.get_context_value(telegram_user_id, "master_id") is None:
-            return self._stale_response()
+            return self._stale_response(telegram_user_id=telegram_user_id)
 
         self._state.set_context_value(telegram_user_id, "service_type", context)
         self._state.set_menu(telegram_user_id, _MENU_CLIENT_DATE_SELECT)
@@ -473,16 +498,16 @@ class TelegramCallbackRouter:
 
     def _handle_client_select_date(self, telegram_user_id: int, context: str | None) -> CallbackHandleResult:
         if context is None or not _DATE_TOKEN_PATTERN.match(context):
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
         master_id_raw = self._state.get_context_value(telegram_user_id, "master_id")
         service_type = self._state.get_context_value(telegram_user_id, "service_type")
         if master_id_raw is None or service_type is None:
-            return self._stale_response()
+            return self._stale_response(telegram_user_id=telegram_user_id)
         try:
             master_id = int(master_id_raw)
             on_date = _parse_date_token(context)
         except ValueError:
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
 
         response = self._flow.select_service(master_id=master_id, on_date=on_date, service_type=service_type)
         slots = response.get("slots", [])
@@ -501,18 +526,19 @@ class TelegramCallbackRouter:
 
     def _handle_client_select_slot(self, telegram_user_id: int, context: str | None) -> CallbackHandleResult:
         if context is None or not _SLOT_TOKEN_PATTERN.match(context):
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
         master_id = self._state.get_context_value(telegram_user_id, "master_id")
         service_type = self._state.get_context_value(telegram_user_id, "service_type")
         if master_id is None or service_type is None:
-            return self._stale_response()
+            return self._stale_response(telegram_user_id=telegram_user_id)
 
         self._state.set_context_value(telegram_user_id, "slot_token", context)
         self._state.set_menu(telegram_user_id, _MENU_CLIENT_CONFIRM)
         slot_start = _parse_slot_token(context)
+        master_name = self._state.get_context_value(telegram_user_id, "master_name") or _MASTER_DISPLAY_NAME_FALLBACK
         summary = (
             "Подтвердите запись:\n"
-            f"- Мастер ID: {master_id}\n"
+            f"- Мастер: {master_name}\n"
             f"- Услуга: {SERVICE_OPTION_LABELS_RU.get(service_type, service_type)}\n"
             f"- Слот: {format_ru_datetime(slot_start)}"
         )
@@ -526,13 +552,13 @@ class TelegramCallbackRouter:
         service_type = self._state.get_context_value(telegram_user_id, "service_type")
         slot_token = self._state.get_context_value(telegram_user_id, "slot_token")
         if master_id_raw is None or service_type is None or slot_token is None:
-            return self._stale_response()
+            return self._stale_response(telegram_user_id=telegram_user_id)
 
         try:
             master_id = int(master_id_raw)
             slot_start = _parse_slot_token(slot_token)
         except ValueError:
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
 
         response = self._flow.confirm(
             client_telegram_user_id=telegram_user_id,
@@ -543,8 +569,12 @@ class TelegramCallbackRouter:
         result_message = str(response.get("message", ""))
         if response.get("created") is True:
             duration_minutes = self._resolve_service_duration_minutes(service_type=service_type)
+            master_name = self._state.get_context_value(telegram_user_id, "master_name")
+            if master_name is None:
+                master_name = self._resolve_master_display_name(master_id)
             result_message = (
                 f"{result_message}\n"
+                f"Мастер: {master_name}\n"
                 f"Слот: {format_ru_slot_range(slot_start, duration_minutes=duration_minutes)} "
                 f"({format_ru_datetime(slot_start)})"
             ).strip()
@@ -572,11 +602,11 @@ class TelegramCallbackRouter:
 
     def _handle_client_cancel_prepare(self, telegram_user_id: int, context: str | None) -> CallbackHandleResult:
         if context is None:
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
         try:
             booking_id = int(context)
         except ValueError:
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
 
         booking = self._find_client_booking_for_user(telegram_user_id=telegram_user_id, booking_id=booking_id)
         self._state.set_context_value(telegram_user_id, "cancel_booking_id", str(booking_id))
@@ -604,11 +634,11 @@ class TelegramCallbackRouter:
         booking_id_raw = context or self._state.get_context_value(telegram_user_id, "cancel_booking_id")
         cancel_slot_dt = self._state.get_context_value(telegram_user_id, "cancel_slot_datetime")
         if booking_id_raw is None:
-            return self._stale_response()
+            return self._stale_response(telegram_user_id=telegram_user_id)
         try:
             booking_id = int(booking_id_raw)
         except ValueError:
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
 
         response = self._flow.cancel(
             client_telegram_user_id=telegram_user_id,
@@ -640,12 +670,12 @@ class TelegramCallbackRouter:
             )
 
         if not _DATE_TOKEN_PATTERN.match(context):
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
 
         try:
             on_date = _parse_date_token(context)
         except ValueError:
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
 
         day_start = datetime.combine(on_date, dt_time.min, tzinfo=UTC)
         day_end = day_start + timedelta(days=1)
@@ -709,11 +739,11 @@ class TelegramCallbackRouter:
 
     def _handle_master_day_off_apply(self, telegram_user_id: int, context: str | None) -> CallbackHandleResult:
         if context is None or not _DATE_TOKEN_PATTERN.match(context):
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
         try:
             on_date = _parse_date_token(context)
         except ValueError:
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
 
         master_ctx = self._schedule.resolve_context(master_telegram_user_id=telegram_user_id)
         if master_ctx is None:
@@ -756,7 +786,7 @@ class TelegramCallbackRouter:
 
     def _handle_master_lunch_apply(self, telegram_user_id: int, context: str | None) -> CallbackHandleResult:
         if context is None or context not in _MASTER_LUNCH_PRESETS:
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
         lunch_start_raw, lunch_end_raw = _MASTER_LUNCH_PRESETS[context]
         lunch_start = dt_time.fromisoformat(lunch_start_raw)
         lunch_end = dt_time.fromisoformat(lunch_end_raw)
@@ -786,7 +816,7 @@ class TelegramCallbackRouter:
 
     def _handle_master_manual_select_service(self, telegram_user_id: int, context: str | None) -> CallbackHandleResult:
         if context is None or context not in SERVICE_OPTION_LABELS_RU:
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
         self._state.set_context_value(telegram_user_id, "master_manual_service", context)
         self._state.set_menu(telegram_user_id, _MENU_MASTER_MANUAL_DATE_SELECT)
         return CallbackHandleResult(
@@ -796,14 +826,14 @@ class TelegramCallbackRouter:
 
     def _handle_master_manual_select_date(self, telegram_user_id: int, context: str | None) -> CallbackHandleResult:
         if context is None or not _DATE_TOKEN_PATTERN.match(context):
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
         service_type = self._state.get_context_value(telegram_user_id, "master_manual_service")
         if service_type is None:
-            return self._stale_response()
+            return self._stale_response(telegram_user_id=telegram_user_id)
         try:
             on_date = _parse_date_token(context)
         except ValueError:
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
 
         master_ctx = self._schedule.resolve_context(master_telegram_user_id=telegram_user_id)
         if master_ctx is None:
@@ -832,10 +862,10 @@ class TelegramCallbackRouter:
 
     def _handle_master_manual_select_slot(self, telegram_user_id: int, context: str | None) -> CallbackHandleResult:
         if context is None or not _SLOT_TOKEN_PATTERN.match(context):
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
         service_type = self._state.get_context_value(telegram_user_id, "master_manual_service")
         if service_type is None:
-            return self._stale_response()
+            return self._stale_response(telegram_user_id=telegram_user_id)
 
         self._state.set_context_value(telegram_user_id, "master_manual_slot", context)
         self._state.set_menu(telegram_user_id, _MENU_MASTER_MANUAL_CONFIRM)
@@ -855,12 +885,12 @@ class TelegramCallbackRouter:
         service_type = self._state.get_context_value(telegram_user_id, "master_manual_service")
         slot_token = self._state.get_context_value(telegram_user_id, "master_manual_slot")
         if service_type is None or slot_token is None:
-            return self._stale_response()
+            return self._stale_response(telegram_user_id=telegram_user_id)
 
         try:
             slot_start = _parse_slot_token(slot_token)
         except ValueError:
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
 
         result = self._schedule.create_manual_booking(
             master_telegram_user_id=telegram_user_id,
@@ -900,11 +930,11 @@ class TelegramCallbackRouter:
 
     def _handle_master_cancel_pick_booking(self, telegram_user_id: int, context: str | None) -> CallbackHandleResult:
         if context is None:
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
         try:
             booking_id = int(context)
         except ValueError:
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
 
         self._state.set_context_value(telegram_user_id, "master_cancel_booking_id", str(booking_id))
         booking = self._find_master_booking_for_user(telegram_user_id=telegram_user_id, booking_id=booking_id)
@@ -934,10 +964,10 @@ class TelegramCallbackRouter:
 
     def _handle_master_cancel_pick_reason(self, telegram_user_id: int, context: str | None) -> CallbackHandleResult:
         if context is None or context not in _MASTER_CANCEL_REASONS:
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
         booking_id = self._state.get_context_value(telegram_user_id, "master_cancel_booking_id")
         if booking_id is None:
-            return self._stale_response()
+            return self._stale_response(telegram_user_id=telegram_user_id)
 
         self._state.set_context_value(telegram_user_id, "master_cancel_reason_code", context)
         self._state.set_menu(telegram_user_id, _MENU_MASTER_CANCEL_CONFIRM)
@@ -954,14 +984,14 @@ class TelegramCallbackRouter:
         reason_code = self._state.get_context_value(telegram_user_id, "master_cancel_reason_code")
         slot_dt = self._state.get_context_value(telegram_user_id, "master_cancel_slot_datetime")
         if booking_id_raw is None or reason_code is None:
-            return self._stale_response()
+            return self._stale_response(telegram_user_id=telegram_user_id)
         if reason_code not in _MASTER_CANCEL_REASONS:
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
 
         try:
             booking_id = int(booking_id_raw)
         except ValueError:
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
 
         response = self._flow.cancel_by_master(
             master_telegram_user_id=telegram_user_id,
@@ -1008,11 +1038,11 @@ class TelegramCallbackRouter:
 
     def _handle_master_admin_add_apply(self, telegram_user_id: int, context: str | None) -> CallbackHandleResult:
         if context is None:
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
         try:
             target_telegram_user_id = int(context)
         except ValueError:
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
 
         result = self._master_admin.add_master(telegram_user_id=target_telegram_user_id)
         self._state.set_menu(telegram_user_id, _MENU_MASTER_ADMIN, reset_context=True)
@@ -1058,11 +1088,11 @@ class TelegramCallbackRouter:
 
     def _handle_master_admin_remove_apply(self, telegram_user_id: int, context: str | None) -> CallbackHandleResult:
         if context is None:
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
         try:
             target_telegram_user_id = int(context)
         except ValueError:
-            return self._invalid_response()
+            return self._invalid_response(telegram_user_id=telegram_user_id)
 
         result = self._master_admin.remove_master(
             telegram_user_id=target_telegram_user_id,
@@ -1096,6 +1126,7 @@ class TelegramCallbackRouter:
                 text(
                     """
                     SELECT b.id, b.slot_start, b.service_type, m.display_name
+                    , m.id AS master_id
                     FROM bookings b
                     JOIN masters m ON m.id = b.master_id
                     WHERE b.client_user_id = :client_user_id
@@ -1114,7 +1145,10 @@ class TelegramCallbackRouter:
                         "id": int(row["id"]),
                         "slot_start": slot_start,
                         "service_type": str(row["service_type"]),
-                        "master_name": str(row["display_name"]),
+                        "master_name": _format_master_display_name(
+                            master_id=int(row["master_id"]),
+                            raw_display_name=row["display_name"],
+                        ),
                     }
                 )
             return result
@@ -1184,17 +1218,46 @@ class TelegramCallbackRouter:
                 return None
             return dt_time.fromisoformat(str(row["work_start"])), dt_time.fromisoformat(str(row["work_end"]))
 
-    def _invalid_response(self) -> CallbackHandleResult:
+    def _invalid_response(self, *, telegram_user_id: int) -> CallbackHandleResult:
         return CallbackHandleResult(
             text=RU_MESSAGES["invalid_callback"],
-            reply_markup=build_root_menu_markup(),
+            reply_markup=self._default_markup_for_user(telegram_user_id),
         )
 
-    def _stale_response(self) -> CallbackHandleResult:
+    def _stale_response(self, *, telegram_user_id: int) -> CallbackHandleResult:
         return CallbackHandleResult(
             text=RU_MESSAGES["stale_callback"],
-            reply_markup=build_root_menu_markup(),
+            reply_markup=self._default_markup_for_user(telegram_user_id),
         )
+
+    def _default_markup_for_user(self, telegram_user_id: int) -> InlineKeyboardMarkup:
+        role = self._roles.resolve_role(telegram_user_id)
+        if role is None:
+            return build_root_menu_markup()
+        return self._default_markup_for_role(role)
+
+    @staticmethod
+    def _default_markup_for_role(role: str) -> InlineKeyboardMarkup:
+        if role == "Client":
+            return build_menu_markup(_MENU_CLIENT)
+        if role == "Master":
+            return build_menu_markup(_MENU_MASTER)
+        return build_root_menu_markup()
+
+    def _resolve_master_display_name(self, master_id: int) -> str:
+        with self._engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    """
+                    SELECT display_name
+                    FROM masters
+                    WHERE id = :master_id
+                    """
+                ),
+                {"master_id": master_id},
+            ).mappings().first()
+        raw_name = row["display_name"] if row is not None else None
+        return _format_master_display_name(master_id=master_id, raw_display_name=raw_name)
 
 
 def encode_callback_data(*, action: str, context: str | None = None) -> str:
@@ -1267,9 +1330,6 @@ def build_menu_markup(menu: str) -> InlineKeyboardMarkup:
             ],
             max_per_row=MOBILE_MENU_MAX_BUTTONS_PER_ROW,
         )
-        rows.extend(
-            [[InlineKeyboardButton(text="Главное меню", callback_data=encode_callback_data(action="hm"))]]
-        )
     elif menu == _MENU_MASTER:
         rows = chunk_inline_buttons(
             [
@@ -1281,9 +1341,6 @@ def build_menu_markup(menu: str) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="Управление мастерами", callback_data=encode_callback_data(action="mam")),
             ],
             max_per_row=MOBILE_MENU_MAX_BUTTONS_PER_ROW,
-        )
-        rows.extend(
-            [[InlineKeyboardButton(text="Главное меню", callback_data=encode_callback_data(action="hm"))]]
         )
     elif menu == _MENU_MASTER_ADMIN:
         rows = chunk_inline_buttons(
@@ -1311,9 +1368,9 @@ def build_client_master_markup(masters: list[object]) -> InlineKeyboardMarkup:
         if not isinstance(item, dict):
             continue
         master_id = item.get("id")
-        name = item.get("display_name")
-        if not isinstance(master_id, int) or not isinstance(name, str):
+        if not isinstance(master_id, int):
             continue
+        name = _format_master_display_name(master_id=master_id, raw_display_name=item.get("display_name"))
         buttons.append(
             InlineKeyboardButton(
                 text=name,
@@ -1558,8 +1615,16 @@ def _service_buttons(*, service_options: list[object], action: str) -> list[Inli
 def _back_and_home_rows(*, action_back: str) -> list[list[InlineKeyboardButton]]:
     return [
         [InlineKeyboardButton(text="Назад", callback_data=encode_callback_data(action=action_back))],
-        [InlineKeyboardButton(text="Главное меню", callback_data=encode_callback_data(action="hm"))],
     ]
+
+
+def _format_master_display_name(*, master_id: int, raw_display_name: object) -> str:
+    if isinstance(raw_display_name, str):
+        normalized = raw_display_name.strip()
+        if normalized:
+            return normalized
+    _ = master_id
+    return _MASTER_DISPLAY_NAME_FALLBACK
 
 
 def _coerce_notifications(value: object) -> list[dict[str, object]]:

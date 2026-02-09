@@ -80,8 +80,8 @@ Use this sequence when validating aiogram runtime against a real Telegram chat.
    - `docker compose logs bot-api --tail=200 | grep 'telegram_updates_runtime_started'`
 4. Map your Telegram user id to `Client` role (replace `YOUR_TG_ID`):
    - `docker compose exec -T postgres psql -U haircuttgbot -d haircuttgbot -c "INSERT INTO roles (name) VALUES ('Client') ON CONFLICT (name) DO NOTHING; INSERT INTO users (telegram_user_id, role_id) VALUES (YOUR_TG_ID, (SELECT id FROM roles WHERE name='Client')) ON CONFLICT (telegram_user_id) DO UPDATE SET role_id = EXCLUDED.role_id;"`
-5. In Telegram chat with bot run `/start`, then validate button-first client flow:
-   - tap `Клиент` -> `Новая запись`;
+5. In Telegram chat with bot run `/start`, verify greeting + direct role landing to `Меню клиента`, then validate button-first client flow:
+   - tap `Новая запись`;
    - choose master -> service -> date -> slot -> confirm;
    - then tap `Отменить запись` and confirm cancel for created booking.
 6. Validate key rejection path in chat:
@@ -92,7 +92,7 @@ Use this sequence when validating aiogram runtime against a real Telegram chat.
    - restart booking flow, choose `Стрижка + борода` and confirm hourly slot range labels (for example `10:00-11:00`, and no `10:30-11:30` starts).
 8. Optional master-role validation requires a second Telegram account:
    - map second account to `Master` role and link to `masters.user_id` record;
-   - run `/start`, tap `Мастер`, and validate buttons:
+   - run `/start`, verify greeting + direct role landing to `Меню мастера`, and validate buttons:
      - `Просмотр расписания`
      - `Выходной день`
      - `Обед`

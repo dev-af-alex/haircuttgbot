@@ -165,6 +165,8 @@ def _book_once(router: TelegramCallbackRouter, *, telegram_user_id: int) -> tupl
 
     result = router.handle(telegram_user_id=telegram_user_id, data=slot_callbacks[0])
     assert "Подтвердите запись" in result.text
+    assert "Мастер: Master Demo 1" in result.text
+    assert "Мастер ID" not in result.text
     assert re.search(r"Слот: \d{2}\.\d{2}\.\d{4} \d{2}:\d{2}", result.text)
 
     result = router.handle(telegram_user_id=telegram_user_id, data="hb1|ccf")
@@ -177,8 +179,45 @@ def test_client_interactive_booking_and_cancel_flow() -> None:
 
     booking_text, _ = _book_once(router, telegram_user_id=2000001)
     assert "успешно создана" in booking_text
+    assert "Мастер: Master Demo 1" in booking_text
+    assert "Мастер ID" not in booking_text
     assert "Слот:" in booking_text
     assert re.search(r"\d{2}:\d{2}-\d{2}:\d{2}", booking_text)
+
+
+def test_start_menu_lands_client_directly_with_greeting() -> None:
+    router = TelegramCallbackRouter(_setup_flow_schema())
+
+    result = router.start_menu(telegram_user_id=2000001)
+
+    assert "Добро пожаловать в барбершоп." in result.text
+    assert "Меню клиента" in result.text
+
+
+def test_client_flow_uses_fallback_master_name_when_profile_name_missing() -> None:
+    engine = _setup_flow_schema()
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE masters SET display_name = '' WHERE id = 1"))
+
+    router = TelegramCallbackRouter(engine)
+    router.seed_root_menu(telegram_user_id=2000001)
+
+    router.handle(telegram_user_id=2000001, data="hb1|cm")
+    result = router.handle(telegram_user_id=2000001, data="hb1|cb")
+    assert "Выберите мастера" in result.text
+    first_button = result.reply_markup.inline_keyboard[0][0]
+    assert first_button.text == "Мастер (имя не указано)"
+
+    result = router.handle(telegram_user_id=2000001, data=str(first_button.callback_data))
+    service_callbacks = _callbacks_for_action(result.reply_markup, "css")
+    result = router.handle(telegram_user_id=2000001, data=service_callbacks[0])
+    date_callbacks = _callbacks_for_action(result.reply_markup, "csd")
+    result = router.handle(telegram_user_id=2000001, data=date_callbacks[1])
+    slot_callbacks = _callbacks_for_action(result.reply_markup, "csl")
+    result = router.handle(telegram_user_id=2000001, data=slot_callbacks[0])
+    assert "Мастер: Мастер (имя не указано)" in result.text
+    result = router.handle(telegram_user_id=2000001, data="hb1|ccf")
+    assert "успешно создана" in result.text
 
     result = router.handle(telegram_user_id=2000001, data="hb1|cc")
     cancel_pick_callbacks = _callbacks_for_action(result.reply_markup, "cci")
@@ -316,7 +355,7 @@ def test_client_interactive_keyboards_keep_mobile_friendly_rows() -> None:
     assert max(client_menu_row_sizes) <= 2
 
     result = router.handle(telegram_user_id=2000001, data="hb1|cb")
-    master_row_sizes = [len(row) for row in result.reply_markup.inline_keyboard[:-2]]
+    master_row_sizes = [len(row) for row in result.reply_markup.inline_keyboard[:-1]]
     assert master_row_sizes
     assert max(master_row_sizes) <= 2
 

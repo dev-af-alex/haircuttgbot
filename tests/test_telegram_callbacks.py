@@ -77,3 +77,13 @@ def test_callback_router_logs_rbac_deny_for_forbidden_action(caplog) -> None:
     deny_events = [event for event in events if event["event"] == "rbac_deny"]
     assert deny_events
     assert deny_events[-1]["command"] == "callback:mm"
+
+
+def test_start_menu_routes_by_role() -> None:
+    router = TelegramCallbackRouter(_setup_schema())
+
+    client_result = router.start_menu(telegram_user_id=2000001)
+    assert "Меню клиента" in client_result.text
+
+    master_result = router.start_menu(telegram_user_id=1000001)
+    assert "Меню мастера" in master_result.text

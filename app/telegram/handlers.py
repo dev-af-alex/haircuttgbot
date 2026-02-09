@@ -42,12 +42,18 @@ def _callbacks() -> TelegramCallbackRouter:
 
 
 @router.message(Command("start"))
+async def show_start(message: Message) -> None:
+    if message.from_user is None:
+        return
+    result = _callbacks().start_menu(telegram_user_id=message.from_user.id)
+    await message.answer(result.text, reply_markup=result.reply_markup)
+
+
 @router.message(Command("help"))
 async def show_help(message: Message) -> None:
     if message.from_user is None:
         return
     result = _service().help(telegram_user_id=message.from_user.id)
-    _callbacks().seed_root_menu(message.from_user.id)
     await message.answer(result.text, reply_markup=build_root_menu_markup())
 
 

@@ -174,7 +174,7 @@ Rules:
     - Local-run impact: local smoke expands with current-time-sensitive checks and master calendar-constraint scenarios.
     - Delivered: Group 01 accepted ADR-0013 + shared same-day boundary helper + day-off conflict primitive; Group 02 integrated stale-slot rejection, occupied-date day-off denial, and schedule-by-date callback flow; Group 03 expanded regression coverage and synchronized local/VM smoke validation steps.
 
-- EPIC-017 — Role-first entry UX and master identity texts — Status: TODO
+- EPIC-017 — Role-first entry UX and master identity texts — Status: DONE
     - Goal: simplify `/start` and booking UX by removing intermediate main menu and using human-readable master identity across client flows.
     - Acceptance:
         - `Главное меню` section is removed from user-visible navigation; role-resolved users land directly in `Client` or `Master` panel on bot start.
@@ -183,8 +183,9 @@ Rules:
         - Regression and smoke coverage validate direct role landing, greeting message contract, and master-name rendering in selection/confirmation flows.
     - Dependencies: EPIC-012, EPIC-013, EPIC-015.
     - Local-run impact: Telegram validation steps in local/VM runbooks shift to role-direct start behavior and updated text assertions.
+    - Delivered: Group 01 role-direct `/start` greeting flow + accepted ADR-0014 identity policy; Group 02 master display-name rollout in client selection/confirmation paths with deterministic fallback; Group 03 regression expansion and local/VM runbook synchronization for role-direct start and text contracts.
 
-- EPIC-018 — Manual master assignment by Telegram nickname (`@...`) — Status: TODO
+- EPIC-018 — Manual master assignment by Telegram nickname (`@...`) — Status: IN_PROGRESS
     - Goal: change bootstrap-master administration flow so master assignment is performed by explicit nickname input, not by selecting existing bot users.
     - Acceptance:
         - In `Управление мастерами` add-master flow accepts only manual nickname input starting with `@` and rejects invalid formats.
