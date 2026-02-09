@@ -221,19 +221,32 @@ def test_metrics_endpoint_tracks_request_latency_and_booking_outcomes(monkeypatc
 
 def test_metrics_include_master_admin_outcomes_counter() -> None:
     before = metrics().body.decode("utf-8")
-    before_value = _metric_value(
+    before_add_value = _metric_value(
         before,
         "bot_api_master_admin_outcomes_total",
         {"action": "add", "outcome": "success"},
         default=0.0,
     )
+    before_rename_value = _metric_value(
+        before,
+        "bot_api_master_admin_outcomes_total",
+        {"action": "rename", "outcome": "rejected"},
+        default=0.0,
+    )
 
     observe_master_admin_outcome("add", "success")
+    observe_master_admin_outcome("rename", "rejected")
 
     after = metrics().body.decode("utf-8")
-    after_value = _metric_value(
+    after_add_value = _metric_value(
         after,
         "bot_api_master_admin_outcomes_total",
         {"action": "add", "outcome": "success"},
     )
-    assert after_value >= before_value + 1.0
+    after_rename_value = _metric_value(
+        after,
+        "bot_api_master_admin_outcomes_total",
+        {"action": "rename", "outcome": "rejected"},
+    )
+    assert after_add_value >= before_add_value + 1.0
+    assert after_rename_value >= before_rename_value + 1.0

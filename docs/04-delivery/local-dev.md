@@ -115,6 +115,8 @@ Use this sequence when validating aiogram runtime against a real Telegram chat.
    - run `Добавить мастера`, send message `@<captured_nickname>`, and check success message;
    - retry with invalid value (`candidate_master`) and check deterministic format rejection;
    - retry with unknown nickname (`@unknown_user`) and check deterministic not-found rejection;
+   - run `Переименовать мастера`, select the same target, submit new display name (for example `Master Renamed`), and verify success message;
+   - retry rename with invalid value (` `) and check deterministic validation rejection;
    - run `Удалить мастера` for the same user and check success message;
    - from non-bootstrap master account confirm deny response for admin actions.
 10. Stop stack:

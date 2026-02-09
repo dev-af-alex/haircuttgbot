@@ -291,12 +291,13 @@ def test_availability_excludes_past_lunch_booking_and_blocks() -> None:
     slots = service.list_slots(
         master_id=1,
         on_date=date(2026, 2, 9),
+        service_type="haircut_beard",
         now=datetime(2026, 2, 9, 10, 30, tzinfo=UTC),
     )
 
     starts = [slot.start_at.strftime("%H:%M") for slot in slots]
 
-    assert starts == ["12:00", "14:00", "16:00", "17:00", "20:00"]
+    assert starts == ["12:00", "14:00", "16:00", "16:30", "17:00", "20:00"]
 
 
 def test_availability_half_open_overlap_boundaries() -> None:
@@ -321,7 +322,12 @@ def test_availability_half_open_overlap_boundaries() -> None:
         )
 
     service = AvailabilityService(engine)
-    slots = service.list_slots(master_id=1, on_date=date(2026, 2, 10), now=datetime(2026, 2, 10, 9, 0, tzinfo=UTC))
+    slots = service.list_slots(
+        master_id=1,
+        on_date=date(2026, 2, 10),
+        service_type="haircut_beard",
+        now=datetime(2026, 2, 10, 9, 0, tzinfo=UTC),
+    )
 
     starts = [slot.start_at.strftime("%H:%M") for slot in slots]
 
@@ -746,6 +752,7 @@ def test_master_day_off_create_and_update_affect_availability() -> None:
     slots_after_create = availability.list_slots(
         master_id=1,
         on_date=date(2026, 2, 14),
+        service_type="haircut_beard",
         now=datetime(2026, 2, 14, 9, 0, tzinfo=UTC),
     )
     starts_after_create = {slot.start_at.strftime("%H:%M") for slot in slots_after_create}
@@ -766,6 +773,7 @@ def test_master_day_off_create_and_update_affect_availability() -> None:
     slots_after_update = availability.list_slots(
         master_id=1,
         on_date=date(2026, 2, 14),
+        service_type="haircut_beard",
         now=datetime(2026, 2, 14, 9, 0, tzinfo=UTC),
     )
     starts_after_update = {slot.start_at.strftime("%H:%M") for slot in slots_after_update}
@@ -916,6 +924,7 @@ def test_lunch_update_is_applied_to_availability_and_booking_checks() -> None:
     slots = availability.list_slots(
         master_id=1,
         on_date=date(2026, 2, 15),
+        service_type="haircut",
         now=datetime(2026, 2, 15, 9, 0, tzinfo=UTC),
     )
     starts = {slot.start_at.strftime("%H:%M") for slot in slots}
@@ -960,6 +969,7 @@ def test_master_manual_booking_success_and_availability_exclusion() -> None:
     slots = availability.list_slots(
         master_id=1,
         on_date=date(2026, 2, 16),
+        service_type="haircut",
         now=datetime(2026, 2, 16, 9, 0, tzinfo=UTC),
     )
     starts = {slot.start_at.strftime("%H:%M") for slot in slots}
@@ -1046,7 +1056,11 @@ def test_telegram_booking_flow_start_and_select_steps() -> None:
     assert isinstance(service_options, list)
     assert len(service_options) == 3
 
-    select_service_payload = flow.select_service(master_id=1, on_date=date(2026, 2, 12))
+    select_service_payload = flow.select_service(
+        master_id=1,
+        on_date=date(2026, 2, 12),
+        service_type="haircut_beard",
+    )
     assert select_service_payload["message"] == "Выберите доступный слот."
     slots = select_service_payload["slots"]
     assert isinstance(slots, list)

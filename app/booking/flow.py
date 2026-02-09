@@ -186,7 +186,7 @@ class TelegramBookingFlowService:
             "service_options": list_service_options(),
         }
 
-    def select_service(self, *, master_id: int, on_date: date, service_type: str | None = None) -> dict[str, object]:
+    def select_service(self, *, master_id: int, on_date: date, service_type: str) -> dict[str, object]:
         if not any(master["id"] == master_id for master in self._repository.list_active_masters()):
             return {"message": RU_BOOKING_MESSAGES["master_not_found"], "slots": []}
 

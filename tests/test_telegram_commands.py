@@ -182,6 +182,7 @@ def test_client_slots_command_formats_slots() -> None:
     result = service.client_slots(
         telegram_user_id=2000001,
         master_id=1,
+        service_type="haircut_beard",
         on_date=date(2026, 2, 20),
     )
 

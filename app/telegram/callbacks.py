@@ -86,6 +86,8 @@ _ALLOWED_ACTIONS = {
     "mau",
     "mad",
     "mar",
+    "man",
+    "max",
 }
 _CONTEXT_PATTERN = re_compile(r"^[A-Za-z0-9_-]{1,32}$")
 _SLOT_TOKEN_PATTERN = re_compile(r"^\d{12}$")
@@ -123,6 +125,8 @@ _ACTION_REQUIRED_COMMAND = {
     "mau": "master:schedule",
     "mad": "master:schedule",
     "mar": "master:schedule",
+    "man": "master:schedule",
+    "max": "master:schedule",
 }
 
 _MENU_ROOT = "root"
@@ -151,6 +155,8 @@ _MENU_MASTER_ADMIN = "master_admin_menu"
 _MENU_MASTER_ADMIN_ADD_SELECT = "master_admin_add_select"
 _MENU_MASTER_ADMIN_REMOVE_SELECT = "master_admin_remove_select"
 _MENU_MASTER_ADMIN_ADD_NICKNAME_INPUT = "master_admin_add_nickname_input"
+_MENU_MASTER_ADMIN_RENAME_SELECT = "master_admin_rename_select"
+_MENU_MASTER_ADMIN_RENAME_INPUT = "master_admin_rename_input"
 
 _MENU_ALLOWED_ACTIONS = {
     _MENU_ROOT: {"hm", "cm", "mm"},
@@ -173,10 +179,12 @@ _MENU_ALLOWED_ACTIONS = {
     _MENU_MASTER_CANCEL_SELECT: {"hm", "mr", "mci"},
     _MENU_MASTER_CANCEL_REASON_SELECT: {"hm", "mr", "mcr"},
     _MENU_MASTER_CANCEL_CONFIRM: {"hm", "mr", "mcn"},
-    _MENU_MASTER_ADMIN: {"hm", "mr", "maa", "mad"},
+    _MENU_MASTER_ADMIN: {"hm", "mr", "maa", "mad", "man"},
     _MENU_MASTER_ADMIN_ADD_SELECT: {"hm", "mr"},
     _MENU_MASTER_ADMIN_ADD_NICKNAME_INPUT: {"hm", "mr"},
     _MENU_MASTER_ADMIN_REMOVE_SELECT: {"hm", "mr", "mar"},
+    _MENU_MASTER_ADMIN_RENAME_SELECT: {"hm", "mr", "max"},
+    _MENU_MASTER_ADMIN_RENAME_INPUT: {"hm", "mr"},
 }
 
 _MENU_TEXT = {
@@ -190,6 +198,7 @@ _MASTER_DISPLAY_NAME_FALLBACK = "Мастер (имя не указано)"
 _MASTER_ADMIN_ADD_NICKNAME_PROMPT = (
     "Введите nickname пользователя для назначения мастером (формат: @nickname)."
 )
+_MASTER_ADMIN_RENAME_PROMPT = "Введите новое имя мастера (1-64 символа)."
 
 _ACTION_TARGET_MENU = {
     "hm": _MENU_ROOT,
@@ -374,7 +383,7 @@ class TelegramCallbackRouter:
                     reply_markup=self._default_markup_for_role(role),
                 )
 
-        if payload.action in {"mam", "maa", "mau", "mad", "mar"} and not self._is_bootstrap_master(
+        if payload.action in {"mam", "maa", "mau", "mad", "mar", "man", "max"} and not self._is_bootstrap_master(
             telegram_user_id=telegram_user_id
         ):
             observe_master_admin_outcome("rbac", "denied")
@@ -438,6 +447,8 @@ class TelegramCallbackRouter:
             "mau": self._handle_master_admin_add_apply,
             "mad": lambda user_id, _: self._handle_master_admin_remove_start(telegram_user_id=user_id),
             "mar": self._handle_master_admin_remove_apply,
+            "man": lambda user_id, _: self._handle_master_admin_rename_start(telegram_user_id=user_id),
+            "max": self._handle_master_admin_rename_select,
         }
         handler = handlers.get(payload.action)
         if handler is None:
@@ -447,9 +458,11 @@ class TelegramCallbackRouter:
     def handle_text(self, *, telegram_user_id: int, text_value: str | None) -> CallbackHandleResult | None:
         if text_value is None:
             return None
-        if self._state.current_menu(telegram_user_id) not in {
+        current_menu = self._state.current_menu(telegram_user_id)
+        if current_menu not in {
             _MENU_MASTER_ADMIN_ADD_SELECT,
             _MENU_MASTER_ADMIN_ADD_NICKNAME_INPUT,
+            _MENU_MASTER_ADMIN_RENAME_INPUT,
         }:
             return None
 
@@ -468,14 +481,51 @@ class TelegramCallbackRouter:
                 reply_markup=build_menu_markup(_MENU_MASTER),
             )
 
-        result = self._master_admin.add_master_by_nickname(raw_nickname=text_value)
+        if current_menu in {_MENU_MASTER_ADMIN_ADD_SELECT, _MENU_MASTER_ADMIN_ADD_NICKNAME_INPUT}:
+            result = self._master_admin.add_master_by_nickname(raw_nickname=text_value)
+            outcome = "success" if result.applied else "rejected"
+            observe_master_admin_outcome("add", outcome)
+            emit_event(
+                "master_admin_action",
+                actor_telegram_user_id=telegram_user_id,
+                target_telegram_user_id=result.target_telegram_user_id,
+                action="add",
+                outcome=outcome,
+                reason=result.reason,
+            )
+
+            if result.applied:
+                self._state.set_menu(telegram_user_id, _MENU_MASTER_ADMIN, reset_context=True)
+                return CallbackHandleResult(
+                    text=result.message,
+                    reply_markup=build_menu_markup(_MENU_MASTER_ADMIN),
+                )
+
+            self._state.set_menu(telegram_user_id, _MENU_MASTER_ADMIN_ADD_NICKNAME_INPUT)
+            return CallbackHandleResult(
+                text=f"{result.message}\n{_MASTER_ADMIN_ADD_NICKNAME_PROMPT}",
+                reply_markup=build_master_admin_add_nickname_markup(),
+            )
+
+        target_telegram_user_id_raw = self._state.get_context_value(telegram_user_id, "rename_target_telegram_user_id")
+        if target_telegram_user_id_raw is None:
+            return self._stale_response(telegram_user_id=telegram_user_id)
+        try:
+            target_telegram_user_id = int(target_telegram_user_id_raw)
+        except ValueError:
+            return self._invalid_response(telegram_user_id=telegram_user_id)
+
+        result = self._master_admin.rename_master_display_name(
+            telegram_user_id=target_telegram_user_id,
+            raw_display_name=text_value,
+        )
         outcome = "success" if result.applied else "rejected"
-        observe_master_admin_outcome("add", outcome)
+        observe_master_admin_outcome("rename", outcome)
         emit_event(
             "master_admin_action",
             actor_telegram_user_id=telegram_user_id,
             target_telegram_user_id=result.target_telegram_user_id,
-            action="add",
+            action="rename",
             outcome=outcome,
             reason=result.reason,
         )
@@ -487,9 +537,9 @@ class TelegramCallbackRouter:
                 reply_markup=build_menu_markup(_MENU_MASTER_ADMIN),
             )
 
-        self._state.set_menu(telegram_user_id, _MENU_MASTER_ADMIN_ADD_NICKNAME_INPUT)
+        self._state.set_menu(telegram_user_id, _MENU_MASTER_ADMIN_RENAME_INPUT)
         return CallbackHandleResult(
-            text=f"{result.message}\n{_MASTER_ADMIN_ADD_NICKNAME_PROMPT}",
+            text=f"{result.message}\n{_MASTER_ADMIN_RENAME_PROMPT}",
             reply_markup=build_master_admin_add_nickname_markup(),
         )
 
@@ -1136,10 +1186,49 @@ class TelegramCallbackRouter:
             target_telegram_user_id=result.target_telegram_user_id,
             action="remove",
             outcome="success" if result.applied else "rejected",
+            reason=result.reason,
         )
         return CallbackHandleResult(
             text=result.message,
             reply_markup=build_menu_markup(_MENU_MASTER_ADMIN),
+        )
+
+    def _handle_master_admin_rename_start(self, *, telegram_user_id: int) -> CallbackHandleResult:
+        renamable = self._master_admin.list_renamable_masters(limit=_MASTER_ADMIN_LIMIT)
+        if not renamable:
+            self._state.set_menu(telegram_user_id, _MENU_MASTER_ADMIN)
+            observe_master_admin_outcome("rename", "rejected")
+            emit_event(
+                "master_admin_action",
+                actor_telegram_user_id=telegram_user_id,
+                target_telegram_user_id=None,
+                action="rename",
+                outcome="rejected",
+                reason="no_renamable_masters",
+            )
+            return CallbackHandleResult(
+                text="Нет активных мастеров для переименования.",
+                reply_markup=build_menu_markup(_MENU_MASTER_ADMIN),
+            )
+
+        self._state.set_menu(telegram_user_id, _MENU_MASTER_ADMIN_RENAME_SELECT)
+        return CallbackHandleResult(
+            text="Выберите мастера для переименования.",
+            reply_markup=build_master_admin_rename_markup(renamable),
+        )
+
+    def _handle_master_admin_rename_select(self, telegram_user_id: int, context: str | None) -> CallbackHandleResult:
+        if context is None:
+            return self._invalid_response(telegram_user_id=telegram_user_id)
+        try:
+            target_telegram_user_id = int(context)
+        except ValueError:
+            return self._invalid_response(telegram_user_id=telegram_user_id)
+        self._state.set_context_value(telegram_user_id, "rename_target_telegram_user_id", str(target_telegram_user_id))
+        self._state.set_menu(telegram_user_id, _MENU_MASTER_ADMIN_RENAME_INPUT)
+        return CallbackHandleResult(
+            text=f"Укажите новое имя для мастера tg:{target_telegram_user_id}.\n{_MASTER_ADMIN_RENAME_PROMPT}",
+            reply_markup=build_master_admin_add_nickname_markup(),
         )
 
     def _is_bootstrap_master(self, *, telegram_user_id: int) -> bool:
@@ -1377,6 +1466,7 @@ def build_menu_markup(menu: str) -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(text="Добавить мастера", callback_data=encode_callback_data(action="maa")),
                 InlineKeyboardButton(text="Удалить мастера", callback_data=encode_callback_data(action="mad")),
+                InlineKeyboardButton(text="Переименовать мастера", callback_data=encode_callback_data(action="man")),
             ],
             max_per_row=MOBILE_MENU_MAX_BUTTONS_PER_ROW,
         )
@@ -1602,6 +1692,24 @@ def build_master_admin_remove_markup(masters: list[dict[str, object]]) -> Inline
             InlineKeyboardButton(
                 text=f"{display_name} (tg:{telegram_user_id})",
                 callback_data=encode_callback_data(action="mar", context=str(telegram_user_id)),
+            )
+        )
+    rows = chunk_inline_buttons(buttons, max_per_row=MOBILE_MENU_MAX_BUTTONS_PER_ROW)
+    rows.extend(_back_and_home_rows(action_back="mr"))
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def build_master_admin_rename_markup(masters: list[dict[str, object]]) -> InlineKeyboardMarkup:
+    buttons: list[InlineKeyboardButton] = []
+    for item in masters:
+        telegram_user_id = item.get("telegram_user_id")
+        display_name = item.get("display_name")
+        if not isinstance(telegram_user_id, int) or not isinstance(display_name, str):
+            continue
+        buttons.append(
+            InlineKeyboardButton(
+                text=f"{display_name} (tg:{telegram_user_id})",
+                callback_data=encode_callback_data(action="max", context=str(telegram_user_id)),
             )
         )
     rows = chunk_inline_buttons(buttons, max_per_row=MOBILE_MENU_MAX_BUTTONS_PER_ROW)

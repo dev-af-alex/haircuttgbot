@@ -16,7 +16,7 @@ _callback_router: TelegramCallbackRouter | None = None
 
 _USAGE = {
     "client_master": "Использование: /client_master <master_id>",
-    "client_slots": "Использование: /client_slots <master_id> <YYYY-MM-DD>",
+    "client_slots": "Использование: /client_slots <master_id> <service_type> <YYYY-MM-DD>",
     "client_book": "Использование: /client_book <master_id> <service_type> <YYYY-MM-DDTHH:MM:SS+00:00>",
     "client_cancel": "Использование: /client_cancel <booking_id>",
     "master_cancel": "Использование: /master_cancel <booking_id> <reason>",
@@ -101,18 +101,20 @@ async def client_slots(message: Message, command: CommandObject) -> None:
         await message.answer(_USAGE["client_slots"])
         return
     parts = command.args.split()
-    if len(parts) != 2:
+    if len(parts) != 3:
         await message.answer(_USAGE["client_slots"])
         return
     try:
         master_id = int(parts[0])
-        on_date = date.fromisoformat(parts[1])
+        service_type = parts[1]
+        on_date = date.fromisoformat(parts[2])
     except ValueError:
         await message.answer(_USAGE["client_slots"])
         return
     result = _service().client_slots(
         telegram_user_id=message.from_user.id,
         master_id=master_id,
+        service_type=service_type,
         on_date=on_date,
     )
     await _reply_with_notifications(message=message, text=result.text, notifications=result.notifications)

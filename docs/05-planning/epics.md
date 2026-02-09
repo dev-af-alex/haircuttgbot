@@ -208,7 +208,7 @@ Rules:
     - Local-run impact: seed/startup contract and smoke assertions shift from demo user pre-provisioning to runtime auto-registration.
     - Delivered: Group 01 finalized ADR-0016 and bootstrap-only seed baseline without demo users; Group 02 delivered idempotent `/start` auto-registration with nickname persistence and no `Пользователь не найден` entry path; Group 03 added regression coverage and synchronized local/VM smoke runbooks for clean baseline and first-user registration checks.
 
-- EPIC-020 — Pre-deploy legacy cleanup + owner-only master rename flow — Status: TODO
+- EPIC-020 — Pre-deploy legacy cleanup + owner-only master rename flow — Status: DONE
     - Goal: remove backward-compatibility code paths not required before first production deploy and add owner-only capability to change master display name.
     - Acceptance:
         - Legacy compatibility branches/adapters that target undeployed historical states are removed; service logic is refactored to one active baseline.
@@ -218,3 +218,4 @@ Rules:
         - Regression and smoke coverage include rename success and deny scenarios after legacy cleanup.
     - Dependencies: EPIC-018, EPIC-019.
     - Local-run impact: compose smoke remains runnable while replacing compatibility checks with baseline-flow validations and owner rename checks.
+    - Delivered: Group 01 finalized ADR-0017 and removed pre-deploy optional service-type compatibility branches; Group 02 delivered bootstrap-owner-only master rename domain + callback flow with audit/metric outcome reasons; Group 03 added rename/cleanup regressions and synchronized local/VM smoke runbooks.

@@ -20,7 +20,7 @@ _HELP_TEXT = """Доступные команды:
 /help
 /client_start
 /client_master <master_id>
-/client_slots <master_id> <YYYY-MM-DD>
+/client_slots <master_id> <service_type> <YYYY-MM-DD>
 /client_book <master_id> <service_type> <YYYY-MM-DDTHH:MM:SS+00:00>
 /client_cancel <booking_id>
 /master_cancel <booking_id> <reason>
@@ -81,13 +81,14 @@ class TelegramCommandService:
         *,
         telegram_user_id: int,
         master_id: int,
+        service_type: str,
         on_date: date,
     ) -> TelegramCommandResult:
         denied = self._deny_if_forbidden(telegram_user_id=telegram_user_id, command="client:book")
         if denied is not None:
             return denied
 
-        response = self._flow.select_service(master_id=master_id, on_date=on_date)
+        response = self._flow.select_service(master_id=master_id, on_date=on_date, service_type=service_type)
         slots = response.get("slots", [])
         lines = [str(response.get("message", ""))]
         for slot in slots:

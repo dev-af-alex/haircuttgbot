@@ -355,6 +355,9 @@ def test_non_bootstrap_master_is_denied_for_master_admin_callbacks() -> None:
     result = router.handle(telegram_user_id=1000002, data="hb1|mam")
     assert "Недостаточно прав" in result.text
 
+    result = router.handle(telegram_user_id=1000002, data="hb1|man")
+    assert "Недостаточно прав" in result.text
+
 
 def test_master_and_admin_keyboards_keep_mobile_friendly_rows() -> None:
     engine = _setup_flow_schema()
@@ -416,3 +419,54 @@ def test_bootstrap_master_add_by_nickname_rejects_invalid_unknown_and_ambiguous(
     ambiguous = router.handle_text(telegram_user_id=1000001, text_value="@dup_nick")
     assert ambiguous is not None
     assert "неоднознач" in ambiguous.text.lower()
+
+
+def test_bootstrap_master_can_rename_master_display_name() -> None:
+    engine = _setup_flow_schema()
+    router = TelegramCallbackRouter(engine, bootstrap_master_telegram_user_id=1000001)
+    router.seed_root_menu(telegram_user_id=1000001)
+
+    router.handle(telegram_user_id=1000001, data="hb1|mm")
+    router.handle(telegram_user_id=1000001, data="hb1|mam")
+    result = router.handle(telegram_user_id=1000001, data="hb1|man")
+    rename_callbacks = _callbacks_for_action(result.reply_markup, "max")
+    assert rename_callbacks
+    target = [item for item in rename_callbacks if item.endswith("|1000002")]
+    assert target
+
+    prompt = router.handle(telegram_user_id=1000001, data=target[0])
+    assert "Введите новое имя мастера" in prompt.text
+
+    applied = router.handle_text(telegram_user_id=1000001, text_value="Master Renamed")
+    assert applied is not None
+    assert "обновлено" in applied.text.lower()
+
+    with engine.begin() as conn:
+        display_name = conn.execute(
+            text(
+                """
+                SELECT m.display_name
+                FROM masters m
+                JOIN users u ON u.id = m.user_id
+                WHERE u.telegram_user_id = 1000002
+                """
+            )
+        ).scalar_one()
+        assert display_name == "Master Renamed"
+
+
+def test_bootstrap_master_rename_rejects_invalid_name_input() -> None:
+    engine = _setup_flow_schema()
+    router = TelegramCallbackRouter(engine, bootstrap_master_telegram_user_id=1000001)
+    router.seed_root_menu(telegram_user_id=1000001)
+
+    router.handle(telegram_user_id=1000001, data="hb1|mm")
+    router.handle(telegram_user_id=1000001, data="hb1|mam")
+    start = router.handle(telegram_user_id=1000001, data="hb1|man")
+    rename_callbacks = _callbacks_for_action(start.reply_markup, "max")
+    assert rename_callbacks
+    router.handle(telegram_user_id=1000001, data=rename_callbacks[0])
+
+    rejected = router.handle_text(telegram_user_id=1000001, text_value=" ")
+    assert rejected is not None
+    assert "некоррект" in rejected.text.lower()

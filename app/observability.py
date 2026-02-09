@@ -195,7 +195,7 @@ def render_metrics() -> tuple[bytes, str]:
                 f'{{action="{_escape_label(action)}",outcome="{_escape_label(outcome)}"}} {value:.1f}'
             )
 
-        lines.append("# HELP bot_api_master_admin_outcomes_total Outcomes for bootstrap master add/remove operations.")
+        lines.append("# HELP bot_api_master_admin_outcomes_total Outcomes for bootstrap master add/remove/rename operations.")
         lines.append("# TYPE bot_api_master_admin_outcomes_total counter")
         for (action, outcome), value in sorted(_MASTER_ADMIN_OUTCOMES_TOTAL.items()):
             lines.append(

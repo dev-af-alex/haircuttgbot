@@ -12,6 +12,7 @@ _MASTER_WORK_END = time(21, 0)
 _MASTER_LUNCH_START = time(13, 0)
 _MASTER_LUNCH_END = time(14, 0)
 _TELEGRAM_NICKNAME_PATTERN = re.compile(r"^[A-Za-z0-9_]{5,32}$")
+_MASTER_DISPLAY_NAME_MAX_LENGTH = 64
 
 
 @dataclass(frozen=True)
@@ -68,6 +69,29 @@ class MasterAdminService:
                     "bootstrap_master_telegram_user_id": bootstrap_master_telegram_user_id,
                     "limit": limit,
                 },
+            ).mappings()
+            return [
+                {
+                    "telegram_user_id": int(row["telegram_user_id"]),
+                    "display_name": str(row["display_name"]),
+                }
+                for row in rows
+            ]
+
+    def list_renamable_masters(self, *, limit: int = 20) -> list[dict[str, object]]:
+        with self._engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    """
+                    SELECT u.telegram_user_id, m.display_name
+                    FROM masters m
+                    JOIN users u ON u.id = m.user_id
+                    WHERE m.is_active = true
+                    ORDER BY u.telegram_user_id
+                    LIMIT :limit
+                    """
+                ),
+                {"limit": limit},
             ).mappings()
             return [
                 {
@@ -310,6 +334,72 @@ class MasterAdminService:
                 reason="deactivated",
             )
 
+    def rename_master_display_name(
+        self,
+        *,
+        telegram_user_id: int,
+        raw_display_name: str,
+    ) -> MasterAdminResult:
+        display_name = normalize_master_display_name(raw_display_name)
+        if display_name is None:
+            return MasterAdminResult(
+                applied=False,
+                message="Некорректное имя мастера. Укажите текст от 1 до 64 символов.",
+                target_telegram_user_id=telegram_user_id,
+                reason="invalid_display_name_format",
+            )
+
+        with self._engine.begin() as conn:
+            row = conn.execute(
+                text(
+                    """
+                    SELECT m.id AS master_id, m.display_name
+                    FROM users u
+                    JOIN masters m ON m.user_id = u.id
+                    WHERE u.telegram_user_id = :telegram_user_id
+                      AND m.is_active = true
+                    """
+                ),
+                {"telegram_user_id": telegram_user_id},
+            ).mappings().first()
+
+            if row is None:
+                return MasterAdminResult(
+                    applied=False,
+                    message="Мастер не найден.",
+                    target_telegram_user_id=telegram_user_id,
+                    reason="master_not_found",
+                )
+
+            current_display_name = str(row["display_name"]).strip()
+            if current_display_name == display_name:
+                return MasterAdminResult(
+                    applied=False,
+                    message="Имя мастера уже установлено.",
+                    target_telegram_user_id=telegram_user_id,
+                    reason="display_name_unchanged",
+                )
+
+            conn.execute(
+                text(
+                    """
+                    UPDATE masters
+                    SET display_name = :display_name
+                    WHERE id = :master_id
+                    """
+                ),
+                {
+                    "display_name": display_name,
+                    "master_id": int(row["master_id"]),
+                },
+            )
+            return MasterAdminResult(
+                applied=True,
+                message=f"Имя мастера {telegram_user_id} обновлено: {display_name}.",
+                target_telegram_user_id=telegram_user_id,
+                reason="renamed",
+            )
+
 
 def normalize_telegram_nickname(raw_nickname: str | None) -> str | None:
     candidate = (raw_nickname or "").strip()
@@ -320,3 +410,12 @@ def normalize_telegram_nickname(raw_nickname: str | None) -> str | None:
     if not _TELEGRAM_NICKNAME_PATTERN.fullmatch(body):
         return None
     return body.lower()
+
+
+def normalize_master_display_name(raw_display_name: str | None) -> str | None:
+    candidate = " ".join((raw_display_name or "").strip().split())
+    if not candidate:
+        return None
+    if len(candidate) > _MASTER_DISPLAY_NAME_MAX_LENGTH:
+        return None
+    return candidate

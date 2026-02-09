@@ -16,7 +16,6 @@ from app.auth import RoleRepository, authorize_command
 from app.booking import (
     AvailabilityService,
     BookingService,
-    DEFAULT_SLOT_DURATION_MINUTES,
     MasterDayOffCommand,
     MasterLunchBreakCommand,
     MasterManualBookingCommand,
@@ -394,7 +393,7 @@ class AuthorizeCommandRequest(BaseModel):
 class AvailabilityRequest(BaseModel):
     master_id: int
     date: date
-    service_type: str | None = None
+    service_type: str
 
 
 class CreateBookingRequest(BaseModel):
@@ -411,7 +410,7 @@ class TelegramFlowMasterRequest(BaseModel):
 class TelegramFlowServiceRequest(BaseModel):
     master_id: int
     date: date
-    service_type: str | None = None
+    service_type: str
 
 
 class TelegramFlowConfirmRequest(BaseModel):
@@ -509,12 +508,9 @@ def availability_slots(payload: AvailabilityRequest) -> dict[str, int | list[dic
     engine = get_engine()
     service = AvailabilityService(engine)
     slots = service.list_slots(master_id=payload.master_id, on_date=payload.date, service_type=payload.service_type)
-    slot_minutes = DEFAULT_SLOT_DURATION_MINUTES
-    if payload.service_type is not None:
-        with engine.connect() as conn:
-            resolved = resolve_service_duration_minutes(payload.service_type, connection=conn)
-        if resolved is not None:
-            slot_minutes = resolved
+    with engine.connect() as conn:
+        resolved = resolve_service_duration_minutes(payload.service_type, connection=conn)
+    slot_minutes = resolved if resolved is not None else 0
     return {
         "slot_minutes": slot_minutes,
         "slots": [

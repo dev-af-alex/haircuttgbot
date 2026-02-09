@@ -171,3 +171,49 @@ def test_remove_master_blocks_bootstrap_and_soft_deactivates() -> None:
             )
         ).scalar_one()
         assert bool(is_active) is False
+
+
+def test_rename_master_display_name_handles_success_and_validation_paths() -> None:
+    engine = _setup_schema()
+    service = MasterAdminService(engine)
+
+    renamed = service.rename_master_display_name(
+        telegram_user_id=1000002,
+        raw_display_name="Top Barber",
+    )
+    assert renamed.applied is True
+    assert renamed.reason == "renamed"
+
+    unchanged = service.rename_master_display_name(
+        telegram_user_id=1000002,
+        raw_display_name="Top Barber",
+    )
+    assert unchanged.applied is False
+    assert unchanged.reason == "display_name_unchanged"
+
+    invalid = service.rename_master_display_name(
+        telegram_user_id=1000002,
+        raw_display_name="   ",
+    )
+    assert invalid.applied is False
+    assert invalid.reason == "invalid_display_name_format"
+
+    missing = service.rename_master_display_name(
+        telegram_user_id=2999999,
+        raw_display_name="Ghost Master",
+    )
+    assert missing.applied is False
+    assert missing.reason == "master_not_found"
+
+    with engine.begin() as conn:
+        display_name = conn.execute(
+            text(
+                """
+                SELECT m.display_name
+                FROM masters m
+                JOIN users u ON u.id = m.user_id
+                WHERE u.telegram_user_id = 1000002
+                """
+            )
+        ).scalar_one()
+        assert display_name == "Top Barber"

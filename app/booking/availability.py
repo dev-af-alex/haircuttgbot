@@ -9,7 +9,6 @@ from sqlalchemy.engine import Engine
 from app.booking.guardrails import normalize_utc, same_day_min_slot_start
 from app.booking.intervals import is_interval_blocked
 from app.booking.service_options import (
-    DEFAULT_SLOT_DURATION_MINUTES,
     DEFAULT_SLOT_STEP_MINUTES,
     resolve_service_duration_minutes,
 )
@@ -29,7 +28,7 @@ class AvailabilityService:
         self,
         master_id: int,
         on_date: date,
-        service_type: str | None = None,
+        service_type: str,
         now: datetime | None = None,
     ) -> list[AvailabilitySlot]:
         """Return available [start, end) slots for a master/day."""
@@ -48,16 +47,11 @@ class AvailabilityService:
             if master is None:
                 return []
 
-            if service_type is not None:
-                duration_minutes = resolve_service_duration_minutes(service_type, connection=conn)
-                if duration_minutes is None:
-                    return []
-            else:
-                duration_minutes = DEFAULT_SLOT_DURATION_MINUTES
+            duration_minutes = resolve_service_duration_minutes(service_type, connection=conn)
+            if duration_minutes is None:
+                return []
             slot_duration = timedelta(minutes=duration_minutes)
-            slot_step = timedelta(
-                minutes=DEFAULT_SLOT_STEP_MINUTES if service_type is not None else DEFAULT_SLOT_DURATION_MINUTES
-            )
+            slot_step = timedelta(minutes=DEFAULT_SLOT_STEP_MINUTES)
 
             work_start = _as_time(master["work_start"])
             work_end = _as_time(master["work_end"])
@@ -134,6 +128,7 @@ def _normalize_now(now: datetime | None) -> datetime | None:
     if now is None:
         return None
     return normalize_utc(now)
+
 
 def _as_time(value: time | str) -> time:
     if isinstance(value, time):
