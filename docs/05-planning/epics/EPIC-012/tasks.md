@@ -6,7 +6,7 @@ Legend:
 
 ## Task list
 
-- T-001 (M) - Define button UX map and callback contract per role - Status: TODO
+- T-001 (M) - Define button UX map and callback contract per role - Status: DONE
   - Output: role menus, callback payload schema, stale-action rules, localization keys.
   - Acceptance checks:
     - UX map covers all existing command-baseline journeys for `Client` and `Master`.
@@ -14,7 +14,7 @@ Legend:
   - Dependencies: none
   - PR group: group-01
 
-- T-002 (M) - Implement shared callback router + state guard layer - Status: TODO
+- T-002 (M) - Implement shared callback router + state guard layer - Status: DONE
   - Output: aiogram callback router, payload validation, stale-action detection, deterministic error replies.
   - Acceptance checks:
     - Invalid/stale callback actions produce stable `ru` user messages and audit log event.

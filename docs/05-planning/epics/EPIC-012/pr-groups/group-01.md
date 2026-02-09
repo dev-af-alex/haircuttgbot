@@ -13,8 +13,8 @@ Create a mergeable foundation for button-first Telegram UX without breaking exis
 
 ## Included tasks
 
-- T-001
-- T-002
+- T-001 - DONE
+- T-002 - DONE
 
 ## Mergeability and runtime safety
 
@@ -37,6 +37,11 @@ docker compose ps
 .venv/bin/pytest -q
 curl -fsS http://127.0.0.1:8080/health
 ```
+
+## Group status
+
+Status: DONE
+Completed at: 2026-02-09
 
 ## Risks and mitigations
 

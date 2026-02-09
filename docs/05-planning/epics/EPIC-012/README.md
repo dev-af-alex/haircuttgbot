@@ -29,6 +29,7 @@ Out of scope:
 - Privacy/minimization: `docs/02-nfr/privacy.md`
 - Runtime and checks: `docs/04-delivery/local-dev.md`, `docs/04-delivery/deploy-vm.md`
 - Decision stub: `docs/90-decisions/adr-0009-telegram-interactive-menu-state-strategy.md`
+- Group-01 callback contract: `docs/05-planning/epics/EPIC-012/callback-contract.md`
 
 ## Epic acceptance
 

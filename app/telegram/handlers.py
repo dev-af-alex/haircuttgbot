@@ -5,12 +5,14 @@ from datetime import date, datetime, time
 
 from aiogram import Bot, Dispatcher, Router
 from aiogram.filters import Command, CommandObject
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, Message
 
 from app.db.session import get_engine
+from app.telegram.callbacks import TelegramCallbackRouter, build_root_menu_markup
 from app.telegram.commands import TelegramCommandService
 
 router = Router(name="telegram-runtime")
+_callback_router: TelegramCallbackRouter | None = None
 
 _USAGE = {
     "client_master": "Использование: /client_master <master_id>",
@@ -32,13 +34,21 @@ def _service() -> TelegramCommandService:
     return TelegramCommandService(get_engine())
 
 
+def _callbacks() -> TelegramCallbackRouter:
+    global _callback_router
+    if _callback_router is None:
+        _callback_router = TelegramCallbackRouter(get_engine())
+    return _callback_router
+
+
 @router.message(Command("start"))
 @router.message(Command("help"))
 async def show_help(message: Message) -> None:
     if message.from_user is None:
         return
     result = _service().help(telegram_user_id=message.from_user.id)
-    await message.answer(result.text)
+    _callbacks().seed_root_menu(message.from_user.id)
+    await message.answer(result.text, reply_markup=build_root_menu_markup())
 
 
 @router.message(Command("client_start"))
@@ -46,7 +56,13 @@ async def client_start(message: Message) -> None:
     if message.from_user is None:
         return
     result = _service().client_start(telegram_user_id=message.from_user.id)
-    await _reply_with_notifications(message=message, text=result.text, notifications=result.notifications)
+    _callbacks().seed_root_menu(message.from_user.id)
+    await _reply_with_notifications(
+        message=message,
+        text=result.text,
+        notifications=result.notifications,
+        reply_markup=build_root_menu_markup(),
+    )
 
 
 @router.message(Command("client_master"))
@@ -247,8 +263,9 @@ async def _reply_with_notifications(
     message: Message,
     text: str,
     notifications: list[dict[str, object]],
+    reply_markup=None,
 ) -> None:
-    await message.answer(text)
+    await message.answer(text, reply_markup=reply_markup)
     if message.from_user is None:
         return
     await _send_notifications(
@@ -273,3 +290,18 @@ async def _send_notifications(
             continue
         with suppress(Exception):
             await bot.send_message(chat_id=recipient, text=text)
+
+
+@router.callback_query()
+async def callback_router(callback: CallbackQuery) -> None:
+    if callback.from_user is None:
+        return
+    result = _callbacks().handle(
+        telegram_user_id=callback.from_user.id,
+        data=callback.data,
+    )
+    with suppress(Exception):
+        await callback.answer()
+    if callback.message is None:
+        return
+    await callback.message.answer(result.text, reply_markup=result.reply_markup)
