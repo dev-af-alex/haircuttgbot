@@ -55,14 +55,16 @@ A developer can run:
    `docker compose exec -T postgres psql -U haircuttgbot -d haircuttgbot -c "SELECT count(*) FROM masters;"`
 6. Confirm startup structured log exists:
    `docker compose logs bot-api --tail=50 | grep '"event": "startup"'`
-7. Validate booking/cancellation flow + master schedule updates (day-off/lunch/manual booking):
+7. Validate booking/cancellation flow + master schedule updates (day-off/lunch/manual booking) + abuse-throttle rejection:
    `docker compose exec -T bot-api python - <<'PY'
 import json
+import urllib.error
 import urllib.request
 from sqlalchemy import create_engine, text
 from app.db.session import get_database_url
 
 client_tg = 2001001
+throttle_tg = 2999001
 slot_1 = "2026-02-13T10:00:00+00:00"
 slot_2 = "2026-02-13T12:00:00+00:00"
 
@@ -77,9 +79,21 @@ with engine.begin() as conn:
     )
     conn.execute(
         text(
+            "INSERT INTO users (telegram_user_id, role_id) VALUES (:telegram_user_id, (SELECT id FROM roles WHERE name='Client')) ON CONFLICT (telegram_user_id) DO NOTHING"
+        ),
+        {"telegram_user_id": throttle_tg},
+    )
+    conn.execute(
+        text(
             "DELETE FROM bookings WHERE client_user_id = (SELECT id FROM users WHERE telegram_user_id = :telegram_user_id)"
         ),
         {"telegram_user_id": client_tg},
+    )
+    conn.execute(
+        text(
+            "DELETE FROM bookings WHERE client_user_id = (SELECT id FROM users WHERE telegram_user_id = :telegram_user_id)"
+        ),
+        {"telegram_user_id": throttle_tg},
     )
     conn.execute(
         text(
@@ -229,6 +243,30 @@ manual_overlap_req = urllib.request.Request(
 manual_overlap_result = json.loads(urllib.request.urlopen(manual_overlap_req).read().decode())
 assert manual_overlap_result["applied"] is False
 
+# EPIC-009 checks: abuse-throttle deny contract
+throttle_payload = {
+    "client_telegram_user_id": throttle_tg,
+    "booking_id": 999999,
+}
+throttle_statuses = []
+throttle_last_body = None
+for _ in range(9):
+    throttle_req = urllib.request.Request(
+        "http://127.0.0.1:8080/internal/telegram/client/booking-flow/cancel",
+        data=json.dumps(throttle_payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(throttle_req) as response:
+            throttle_statuses.append(response.status)
+            throttle_last_body = json.loads(response.read().decode())
+    except urllib.error.HTTPError as exc:
+        throttle_statuses.append(exc.code)
+        throttle_last_body = json.loads(exc.read().decode())
+
+assert throttle_statuses[-1] == 429
+assert throttle_last_body["code"] == "throttled"
+
 print(
     {
         "first": first,
@@ -240,6 +278,8 @@ print(
         "lunch_result": lunch_result,
         "manual_result": manual_result,
         "manual_overlap_result": manual_overlap_result,
+        "throttle_statuses": throttle_statuses,
+        "throttle_last_body": throttle_last_body,
     }
 )
 PY`

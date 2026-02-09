@@ -1,6 +1,6 @@
 # EPIC-009 — Security and operations hardening baseline
 
-Status: IN_PROGRESS
+Status: DONE
 
 ## Goal
 
@@ -65,3 +65,19 @@ Close remaining MVP NFR gaps for abuse protection, secrets handling, retention p
   - privacy/security retention windows and deletion handling.
 - Synchronized delivery runbook with TLS and secrets-rotation operational baseline.
 - Marked `T-004` and `group-02` as `DONE`.
+
+## Delivered (Group 03)
+
+- Extended local smoke runbook with abuse-throttle rejection validation (`429` + `code=throttled`) for Telegram command path.
+- Completed final planning/doc-sync updates and marked `T-003`, `T-005`, and `group-03` as `DONE`.
+
+## Epic closure
+
+- Closed on: 2026-02-09
+- Merge gates status:
+  - `docker compose up -d --build`: passed
+  - Local smoke test from `docs/04-delivery/local-dev.md`: passed
+  - Host unit tests: `.venv/bin/pytest -q` passed
+  - Docs sync: completed for NFR policies, delivery runbook, and planning artifacts
+  - Security/CI gates: enforced by mandatory PR pipeline (`pytest`, Bandit, pip-audit, Gitleaks, migration check)
+- Intentional deviations: none

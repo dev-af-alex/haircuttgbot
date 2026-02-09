@@ -19,7 +19,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 2 dev-days
   - Dependencies: T-001
 
-- T-003 — Add tests and smoke checks for abuse-protection scenarios — Status: TODO
+- T-003 — Add tests and smoke checks for abuse-protection scenarios — Status: DONE
   - Scope: add unit/integration coverage and extend smoke procedure with at least one throttle rejection case.
   - Acceptance:
     - test suite covers allow/deny behavior and logging side-effects.
@@ -35,7 +35,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 2 dev-days
   - Dependencies: T-001
 
-- T-005 — Final doc-sync and epic closure checks — Status: TODO
+- T-005 — Final doc-sync and epic closure checks — Status: DONE
   - Scope: complete planning sync and verify merge gates for EPIC-009 closure.
   - Acceptance:
     - epic roadmap/workspace statuses reflect delivered work.

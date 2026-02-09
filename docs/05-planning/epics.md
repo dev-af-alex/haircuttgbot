@@ -90,7 +90,7 @@ Rules:
     - Local-run impact: local environment mirrors VM runtime layout to reduce deployment drift.
     - Delivered: Group 01 deployment contract + artifact/secrets strategy and ADR-0005 decision finalization; Group 02 deterministic deploy/rollback runbook with explicit failure triggers; Group 03 post-deploy verification checklist + operational handoff notes and closure sync.
 
-- EPIC-009 — Security and operations hardening baseline — Status: IN_PROGRESS
+- EPIC-009 — Security and operations hardening baseline — Status: DONE
     - Goal: close remaining MVP NFR gaps for abuse protection, secrets handling, retention policy, and operational SLO definitions on single-VM runtime.
     - Acceptance:
         - Rate-limit and abuse-control baseline is implemented and documented for Telegram-facing command paths.
@@ -98,4 +98,4 @@ Rules:
         - SLO/SLI targets and retention policy are defined with alert/runbook alignment.
     - Dependencies: EPIC-007, EPIC-008.
     - Local-run impact: compose runtime remains stable while adding protective middleware/config and updated smoke checks for rejection scenarios.
-    - Progress: Group 01 completed (`T-001`, `T-002`) with accepted abuse-protection ADR, Telegram command throttling middleware, and abuse outcome observability baseline; Group 02 completed (`T-004`) with finalized secrets/TLS/SLO/retention policy documentation and deployment runbook synchronization.
+    - Delivered: Group 01 accepted abuse-protection ADR + Telegram command throttling middleware + abuse observability baseline; Group 02 finalized secrets/TLS/SLO/retention policy docs and deployment-runbook synchronization; Group 03 smoke hardening for throttle rejection and final closure sync.
