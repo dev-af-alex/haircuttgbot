@@ -1,6 +1,6 @@
 # EPIC-013 — Bootstrap identity and master administration
 
-Status: IN_PROGRESS
+Status: DONE
 Owner: TBD
 
 ## Goal
@@ -37,3 +37,15 @@ Out of scope:
 - Runtime fails fast with explicit operator-facing error when bootstrap config is invalid or missing.
 - Only bootstrap master can add/remove masters via Telegram button-first interactions; all attempts are RBAC-checked and audited.
 - Local and VM smoke paths include bootstrap-role presence and master add/remove checks while preserving existing docker-compose startup path.
+
+## Delivered
+
+- Bootstrap provisioning strategy accepted in ADR (`docs/90-decisions/adr-0010-bootstrap-master-provisioning-strategy.md`) and implemented as startup-seed with required `BOOTSTRAP_MASTER_TELEGRAM_ID`.
+- Bootstrap-only add/remove master flows delivered in Telegram callbacks with idempotent behavior and soft deactivation on remove.
+- Observability expanded with `master_admin_action` events and `bot_api_master_admin_outcomes_total` metric family.
+- Local and VM runbooks synchronized for bootstrap/master-admin validation; inline smoke scripts removed from docs in favor of explicit command/test steps.
+
+## Merge-gate status
+
+- Local merge gates satisfied: `docker compose up -d --build`, smoke checks from `docs/04-delivery/local-dev.md`, and `.venv/bin/pytest -q` passed.
+- No intentional deviations were introduced for this epic close-out; CI/SAST/dependency/secrets checks remain required at PR merge time.

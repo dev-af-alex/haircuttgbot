@@ -130,7 +130,7 @@ Rules:
     - Dependencies: EPIC-011, EPIC-010, EPIC-009.
     - Local-run impact: local runbook and smoke checks shift from command-centric Telegram validation to button-first scenarios while preserving existing compose runtime and CI security gates.
 
-- EPIC-013 — Bootstrap identity and master administration — Status: IN_PROGRESS
+- EPIC-013 — Bootstrap identity and master administration — Status: DONE
     - Goal: ensure baseline roles and one bootstrap master are always present after migration/startup, with bootstrap master Telegram ID configured via environment and delegated master management rights.
     - Acceptance:
         - On clean DB start, roles required by RBAC are created idempotently by migration/seed path (`Client`, `Master`).
@@ -139,6 +139,7 @@ Rules:
         - Local/VM smoke includes bootstrap-role presence and add/remove master scenarios.
     - Dependencies: EPIC-002, EPIC-003, EPIC-011, EPIC-012.
     - Local-run impact: `docker compose up -d` and smoke now require bootstrap master env configuration and verify idempotent baseline seed behavior.
+    - Delivered: Group 01 finalized bootstrap provisioning ADR/env contract + idempotent startup seed with fail-fast validation; Group 02 delivered bootstrap-only master add/remove callback flows with audit events and dedicated metrics; Group 03 synchronized local/VM smoke docs, added master-admin regression coverage, and completed closure readiness checks.
 
 - EPIC-014 — Service duration model and variable-slot booking engine — Status: TODO
     - Goal: move from fixed 60-minute slots to per-service durations (for example, haircut 30 min, haircut+beard 60 min) in availability, booking, and conflict checks.
