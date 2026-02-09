@@ -13,6 +13,7 @@ Merge strategy: merge-commit.
 ## Implemented baseline
 
 - Workflow file: `.github/workflows/ci.yml`
+- Checkout policy: full git history in CI checkout (`fetch-depth: 0`) to support commit-range scanners (Gitleaks) on pull requests.
 - Dependency update automation: `.github/dependabot.yml` (weekly grouped `pip` + GitHub Actions updates to reduce incompatible single-package bumps)
 - Trigger: every `pull_request` and push to `master`
 - Python version: `3.12`
