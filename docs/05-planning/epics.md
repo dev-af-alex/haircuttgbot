@@ -80,7 +80,7 @@ Rules:
     - Local-run impact: compose and docs include observability endpoints plus backup/restore rehearsal commands.
     - Delivered: Group 01 structured logs + metrics baseline, Group 02 PostgreSQL backup/restore runbook with local clean-state rehearsal steps, and Group 03 minimal alert baseline + response notes.
 
-- EPIC-008 — Single-VM deployment baseline — Status: IN_PROGRESS
+- EPIC-008 — Single-VM deployment baseline — Status: DONE
     - Goal: package and deploy the working bot stack onto one VM with documented rollback.
     - Acceptance:
         - `docs/04-delivery/deploy-vm.md` contains complete, reproducible VM deployment and rollback instructions.
@@ -88,4 +88,4 @@ Rules:
         - Post-deploy smoke test validates core booking and schedule operations.
     - Dependencies: EPIC-001, EPIC-004, EPIC-006, EPIC-007.
     - Local-run impact: local environment mirrors VM runtime layout to reduce deployment drift.
-    - Progress: Group 01 completed (`T-001`) with deployment contract + artifact/secrets strategy and ADR-0005 decision finalization; Group 02 completed (`T-002`, `T-003`) with deterministic deploy/rollback runbook and explicit failure triggers.
+    - Delivered: Group 01 deployment contract + artifact/secrets strategy and ADR-0005 decision finalization; Group 02 deterministic deploy/rollback runbook with explicit failure triggers; Group 03 post-deploy verification checklist + operational handoff notes and closure sync.

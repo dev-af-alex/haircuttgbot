@@ -1,6 +1,6 @@
 # EPIC-008 — Single-VM deployment baseline
 
-Status: IN_PROGRESS
+Status: DONE
 
 ## Goal
 
@@ -70,3 +70,23 @@ Package and deploy the working Telegram bot stack onto one Linux VM with reprodu
   - previous-release restore command sequence
   - post-rollback validation and incident-note requirement
 - Marked `T-002`, `T-003`, and `group-02` as `DONE`.
+
+## Delivered (Group 03)
+
+- Added post-deploy verification checklist and operational handoff notes in `docs/04-delivery/deploy-vm.md`.
+- Linked deployment runbook to EPIC-007 operational runbooks:
+  - `docs/04-delivery/local-dev.md`
+  - `docs/04-delivery/postgresql-backup-restore.md`
+  - `docs/04-delivery/alerts-baseline.md`
+- Marked `T-004`, `T-005`, and `group-03` as `DONE`.
+
+## Epic closure
+
+- Closed on: 2026-02-09
+- Merge gates status:
+  - `docker compose up -d --build`: passed
+  - Local smoke test from `docs/04-delivery/local-dev.md`: passed
+  - Host unit tests: `.venv/bin/pytest -q` passed
+  - Docs sync: completed for deployment runbook, planning artifacts, and closure status
+  - Security/CI gates: enforced by mandatory PR pipeline (`pytest`, Bandit, pip-audit, Gitleaks, migration check)
+- Intentional deviations: none

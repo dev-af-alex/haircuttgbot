@@ -255,3 +255,41 @@ Every rollback must produce a short incident note with:
 - Trigger condition that caused rollback.
 - Rollback operator and restored release ID.
 - Health/smoke verification result after rollback.
+
+## Post-deploy verification checklist (release gate)
+
+Use this checklist after every production deployment and rollback recovery.
+
+### Service and observability checks
+
+- `docker compose --env-file /opt/haircuttgbot/shared/.env ps -a` shows:
+  - `migrate` finished with `Exited (0)`
+  - `bot-api`, `postgres`, `redis` are healthy
+- `curl -fsS http://127.0.0.1:8080/health` returns `{"status":"ok","service":"bot-api"}`
+- `curl -fsS http://127.0.0.1:8080/metrics | grep -E 'bot_api_service_health|bot_api_requests_total|bot_api_request_latency_seconds|bot_api_booking_outcomes_total'` returns expected metric families
+- `docker compose --env-file /opt/haircuttgbot/shared/.env logs bot-api --tail=50 | grep '"event": "startup"'` returns startup structured log
+
+### Functional smoke checks
+
+Run canonical smoke steps from `docs/04-delivery/local-dev.md`:
+
+- seed baseline data
+- booking flow success + one-active-booking rejection
+- client cancellation + master cancellation-without-reason rejection
+- master day-off update
+- master lunch update
+- master manual booking success + overlap rejection
+
+### Handoff notes for operations
+
+- Record deployed release ID and UTC deployment timestamp.
+- Attach results of the post-deploy checklist to change/incident ticket.
+- Document whether rollback was needed; if yes, include rollback incident note from section above.
+- Confirm backup job status and most recent successful dump in `/opt/haircuttgbot/backups/`.
+- Confirm alert routes are active for service-down and booking-failure spike signals.
+
+### Linked runbooks
+
+- Local smoke/reference checks: `docs/04-delivery/local-dev.md`
+- Backup/restore rehearsal: `docs/04-delivery/postgresql-backup-restore.md`
+- Alert baseline and triage: `docs/04-delivery/alerts-baseline.md`

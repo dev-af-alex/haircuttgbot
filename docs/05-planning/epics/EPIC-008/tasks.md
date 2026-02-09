@@ -27,7 +27,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 1 dev-day
   - Dependencies: T-002
 
-- T-004 — Add deployment verification checklist and handoff notes — Status: TODO
+- T-004 — Add deployment verification checklist and handoff notes — Status: DONE
   - Scope: add post-deploy validation checklist aligned with local smoke path and operational handoff.
   - Acceptance:
     - checklist verifies health, metrics, booking flow, and schedule-management flow after deploy.
@@ -35,7 +35,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 1 dev-day
   - Dependencies: T-002
 
-- T-005 — Final doc-sync and epic closure checks — Status: TODO
+- T-005 — Final doc-sync and epic closure checks — Status: DONE
   - Scope: resolve planning/doc-sync updates and confirm merge gates for deployment baseline.
   - Acceptance:
     - epic roadmap/workspace statuses reflect delivered work.
