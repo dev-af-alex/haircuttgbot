@@ -129,3 +129,33 @@ Rules:
         - Local and VM smoke paths include at least one end-to-end interactive-button scenario for `Client` and `Master`.
     - Dependencies: EPIC-011, EPIC-010, EPIC-009.
     - Local-run impact: local runbook and smoke checks shift from command-centric Telegram validation to button-first scenarios while preserving existing compose runtime and CI security gates.
+
+- EPIC-013 — Bootstrap identity and master administration — Status: TODO
+    - Goal: ensure baseline roles and one bootstrap master are always present after migration/startup, with bootstrap master Telegram ID configured via environment and delegated master management rights.
+    - Acceptance:
+        - On clean DB start, roles required by RBAC are created idempotently by migration/seed path (`Client`, `Master`).
+        - One bootstrap master is created or updated by configured Telegram ID (env), and startup fails fast with explicit error if config is missing/invalid.
+        - Bootstrap master can add and remove other masters via Telegram button flow with RBAC and audit logging.
+        - Local/VM smoke includes bootstrap-role presence and add/remove master scenarios.
+    - Dependencies: EPIC-002, EPIC-003, EPIC-011, EPIC-012.
+    - Local-run impact: `docker compose up -d` and smoke now require bootstrap master env configuration and verify idempotent baseline seed behavior.
+
+- EPIC-014 — Service duration model and variable-slot booking engine — Status: TODO
+    - Goal: move from fixed 60-minute slots to per-service durations (for example, haircut 30 min, haircut+beard 60 min) in availability, booking, and conflict checks.
+    - Acceptance:
+        - Service catalog stores configurable duration per service and default values cover baseline services.
+        - Availability generation and conflict detection respect service duration and prevent partial overlap with lunch/day-off/manual bookings.
+        - Booking/cancel flows remain idempotent under duplicate Telegram deliveries with variable durations.
+        - Smoke tests validate at least one 30-minute and one 60-minute service scenario end-to-end.
+    - Dependencies: EPIC-004, EPIC-006, EPIC-010, EPIC-012.
+    - Local-run impact: local verification expands from fixed-hour assumptions to mixed-duration slots and updated test fixtures.
+
+- EPIC-015 — Localized readable time and final mobile UX polish — Status: TODO
+    - Goal: deliver human-readable time/date messages and complete mobile-first Telegram interaction polish for client/master flows.
+    - Acceptance:
+        - Client-facing and master-facing booking/schedule messages display slot time in readable localized format (`ru`) instead of raw timestamps.
+        - Interactive keyboards keep key options within phone-friendly row widths across main menus and booking/schedule steps.
+        - Regression coverage verifies formatting consistency for create/cancel/update notifications.
+        - Local/VM smoke includes a real Telegram check for readable time output and phone-usable button menus.
+    - Dependencies: EPIC-012, EPIC-013, EPIC-014.
+    - Local-run impact: smoke and manual QA checklists add UI/format assertions in addition to API correctness.
