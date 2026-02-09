@@ -13,7 +13,7 @@
 
 - DB type: PostgreSQL 16.
 - Migrations: Alembic (`alembic/`, `alembic.ini`) with revisioned schema changes.
-- Backups: TODO (single VM backup cadence and restore validation in reliability epic).
+- Backups: logical `pg_dump` custom-format dumps (`-Fc`) daily, with restore rehearsal documented in `docs/04-delivery/postgresql-backup-restore.md`.
 
 ## 3) Constraints and integrity rules
 

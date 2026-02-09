@@ -12,6 +12,7 @@ A developer can run:
 
 - Docker Engine
 - Docker Compose v2 (`docker compose`)
+- Optional for host-side unit tests: Python 3.12 virtualenv with dependencies installed in `.venv`
 - Optional: copy `.env.example` to `.env` and set `TELEGRAM_BOT_TOKEN` for real Telegram integration tests
 
 ## Local run steps (must be kept current)
@@ -24,7 +25,9 @@ A developer can run:
 4. Wait until `bot-api`, `postgres`, and `redis` are healthy:
    `docker compose ps`
 5. Run smoke test (below)
-6. `docker compose down` to stop
+6. (Recommended) Run unit tests from project virtualenv:
+   `.venv/bin/pytest -q`
+7. `docker compose down` to stop
 
 ## Ports
 
@@ -45,9 +48,9 @@ A developer can run:
 2. Seed baseline records:
    `docker compose exec -T bot-api python -m app.db.seed`
 3. Check API health endpoint:
-   `curl -fsS http://localhost:8080/health`
+   `curl -fsS http://127.0.0.1:8080/health`
 4. Check metrics endpoint and core metric families:
-   `curl -fsS http://localhost:8080/metrics | grep -E 'bot_api_service_health|bot_api_requests_total|bot_api_request_latency_seconds|bot_api_booking_outcomes_total'`
+   `curl -fsS http://127.0.0.1:8080/metrics | grep -E 'bot_api_service_health|bot_api_requests_total|bot_api_request_latency_seconds|bot_api_booking_outcomes_total'`
 5. Validate seed result (at least 2 masters):
    `docker compose exec -T postgres psql -U haircuttgbot -d haircuttgbot -c "SELECT count(*) FROM masters;"`
 6. Confirm startup structured log exists:
@@ -240,8 +243,12 @@ print(
     }
 )
 PY`
+8. Rehearse PostgreSQL backup/restore once per release candidate (or when schema changes):
+   follow `docs/04-delivery/postgresql-backup-restore.md`
 
 ## Notes
 
 - Runtime skeleton includes automatic migration execution via `migrate` service.
+- Run host-side Python tooling via virtualenv binaries (for example: `.venv/bin/pytest`, `.venv/bin/bandit`).
 - Do not commit secrets or real bot tokens.
+- Backup rehearsal commands and retention baseline are documented in `docs/04-delivery/postgresql-backup-restore.md`.

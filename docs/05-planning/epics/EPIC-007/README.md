@@ -57,3 +57,9 @@ Add an operations baseline for single-VM production: structured logs, metrics, a
 - Added structured event logging for startup, RBAC-deny, booking lifecycle, and master schedule-write actions.
 - Added `/metrics` endpoint with health gauge, request count/latency histogram, and booking/schedule outcome counters.
 - Added regression tests for log redaction and metric updates after booking requests.
+
+## Delivered (Group 02)
+
+- Added PostgreSQL backup/restore runbook at `docs/04-delivery/postgresql-backup-restore.md` with prerequisites, dump command, retention, and restore sequence.
+- Added clean-state restore rehearsal and integrity-check queries for `users`, `masters`, `bookings`, and `availability_blocks`.
+- Updated local-dev runbook to include backup/restore rehearsal in release validation.

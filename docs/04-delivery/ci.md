@@ -32,15 +32,16 @@ Schema regression check:
 
 Run from repository root:
 
-1. `python -m pip install --upgrade pip`
-2. `pip install -r requirements.txt`
-3. `pip install pytest bandit pip-audit`
-4. `docker compose up -d postgres`
-5. `DATABASE_URL=postgresql+psycopg2://haircuttgbot:haircuttgbot@localhost:5432/haircuttgbot alembic upgrade head`
-6. `pytest -q`
-7. `bandit -q -r app`
-8. `pip-audit`
-9. `docker compose down`
+1. `python -m venv .venv`
+2. `.venv/bin/python -m pip install --upgrade pip`
+3. `.venv/bin/pip install -r requirements.txt`
+4. `.venv/bin/pip install pytest bandit pip-audit`
+5. `docker compose up -d postgres`
+6. `DATABASE_URL=postgresql+psycopg2://haircuttgbot:haircuttgbot@127.0.0.1:5432/haircuttgbot .venv/bin/alembic upgrade head`
+7. `.venv/bin/pytest -q`
+8. `.venv/bin/bandit -q -r app`
+9. `.venv/bin/pip-audit`
+10. `docker compose down`
 
 ## Failure interpretation
 

@@ -27,7 +27,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 2 dev-days
   - Dependencies: T-001
 
-- T-004 — Implement PostgreSQL backup workflow + runbook — Status: TODO
+- T-004 — Implement PostgreSQL backup workflow + runbook — Status: DONE
   - Scope: define and document repeatable backup command set for single VM (logical dump + retention guidance).
   - Acceptance:
     - runbook includes prerequisites, backup command, retention, and storage location guidance.
@@ -35,7 +35,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 2 dev-days
   - Dependencies: T-001
 
-- T-005 — Validate restore rehearsal and data-integrity checks — Status: TODO
+- T-005 — Validate restore rehearsal and data-integrity checks — Status: DONE
   - Scope: document/execute restore rehearsal against local stack and verify booking/schedule data recovery semantics.
   - Acceptance:
     - rehearsal includes restore into clean DB state and integrity verification queries.

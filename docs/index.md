@@ -27,6 +27,7 @@
 ## Delivery (SSOT for local run)
 
 - `docs/04-delivery/local-dev.md`       ← docker-compose local run definition (SSOT)
+- `docs/04-delivery/postgresql-backup-restore.md` ← backup/restore rehearsal runbook
 - `docs/04-delivery/ci.md`              ← mandatory security gates
 - `docs/04-delivery/deploy-vm.md`       ← single-VM deployment
 

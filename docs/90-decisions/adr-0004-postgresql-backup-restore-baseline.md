@@ -1,7 +1,7 @@
 # ADR-0004: PostgreSQL backup/restore baseline for single VM
 
 Date: 2026-02-08
-Status: Proposed
+Status: Accepted
 Deciders: Engineering
 
 ## Context
@@ -10,7 +10,12 @@ EPIC-007 requires a validated backup/restore runbook for single-VM operations. W
 
 ## Decision
 
-TODO in EPIC-007 implementation. Candidate direction: logical PostgreSQL dumps (`pg_dump`) with scheduled retention and documented restore rehearsal steps.
+Adopt logical PostgreSQL backups using `pg_dump` in custom format (`-Fc`) as the baseline for single-VM operations.
+
+- Cadence: at least daily backups and before schema migrations.
+- Retention: keep minimum 7 daily copies on-host and copy daily backup off-host.
+- Restore: use `pg_restore --clean --if-exists` into a recreated clean database.
+- Validation: run restore rehearsal and integrity-check queries (`users`, `masters`, `bookings`, `availability_blocks`) following `docs/04-delivery/postgresql-backup-restore.md`.
 
 ## Alternatives considered
 
@@ -20,4 +25,6 @@ TODO in EPIC-007 implementation. Candidate direction: logical PostgreSQL dumps (
 
 ## Consequences
 
-Positive, negative, and follow-up actions will be finalized with EPIC-007 Group 02 once rehearsal evidence is collected.
+- Positive: low operational complexity, reproducible commands for local and VM environments, and explicit recovery validation path.
+- Negative: no point-in-time recovery; worst-case data loss window equals backup cadence.
+- Follow-up: evaluate WAL/PITR in later hardening if stricter RPO is required.

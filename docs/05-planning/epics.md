@@ -78,6 +78,7 @@ Rules:
         - Backup and restore procedure for PostgreSQL documented and validated in local/staging rehearsal.
     - Dependencies: EPIC-001, EPIC-002, EPIC-004, EPIC-006.
     - Local-run impact: compose and docs include observability endpoints plus backup/restore rehearsal commands.
+    - Delivered: Group 01 structured logs + metrics baseline, and Group 02 PostgreSQL backup/restore runbook with local clean-state rehearsal steps.
 
 - EPIC-008 — Single-VM deployment baseline — Status: TODO
     - Goal: package and deploy the working bot stack onto one VM with documented rollback.

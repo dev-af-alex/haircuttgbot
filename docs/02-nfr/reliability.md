@@ -7,13 +7,13 @@
 
 ## 2) Recovery objectives
 
-- RTO: TODO (max acceptable restore time after outage).
-- RPO: TODO (max acceptable data loss window for bookings/schedule updates).
+- RTO: <= 60 minutes for full PostgreSQL logical-restore recovery on single VM.
+- RPO: <= 24 hours (daily logical backup baseline).
 
 ## 3) Backups / DR
 
-- Backups: TODO (PostgreSQL backup cadence, retention, and storage location on single VM/offsite).
-- Restore procedure: TODO (tested runbook for full restore and point-in-time validation).
+- Backups: daily PostgreSQL logical dump (`pg_dump -Fc`) with at least 7 local daily copies and daily off-host copy.
+- Restore procedure: tested clean-state restore runbook in `docs/04-delivery/postgresql-backup-restore.md` using `pg_restore --clean --if-exists`.
 
 ## 4) Observability
 

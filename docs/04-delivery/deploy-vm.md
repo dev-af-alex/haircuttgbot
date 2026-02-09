@@ -20,6 +20,12 @@ A single VM hosts the “working project”.
 - Backup strategy (especially DB volumes)
 - Rollback steps
 
+## Backup and restore baseline
+
+- Use logical PostgreSQL backups (`pg_dump -Fc`) at least daily.
+- Keep minimum 7 daily copies on VM and push daily copy off-host.
+- Execute restore rehearsal regularly using `docs/04-delivery/postgresql-backup-restore.md`.
+
 ## Minimal deploy outline (fill in)
 
 1) Provision VM (TODO)
