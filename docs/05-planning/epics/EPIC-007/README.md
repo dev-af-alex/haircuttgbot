@@ -1,6 +1,6 @@
 # EPIC-007 — Observability + reliability baseline
 
-Status: IN_PROGRESS
+Status: DONE
 
 ## Goal
 
@@ -63,3 +63,20 @@ Add an operations baseline for single-VM production: structured logs, metrics, a
 - Added PostgreSQL backup/restore runbook at `docs/04-delivery/postgresql-backup-restore.md` with prerequisites, dump command, retention, and restore sequence.
 - Added clean-state restore rehearsal and integrity-check queries for `users`, `masters`, `bookings`, and `availability_blocks`.
 - Updated local-dev runbook to include backup/restore rehearsal in release validation.
+
+## Delivered (Group 03)
+
+- Added minimal alert baseline in `docs/04-delivery/alerts-baseline.md` for service-down and booking failure spike detection.
+- Added operational response notes and triage commands for both alert classes.
+- Completed EPIC planning sync: `T-006` marked `DONE`, Group 03 planning artifact created, and roadmap status synchronized.
+
+## Epic closure
+
+- Closed on: 2026-02-09
+- Merge gates status:
+  - `docker compose up -d --build`: passed
+  - Local smoke test from `docs/04-delivery/local-dev.md`: passed
+  - Host unit tests: `.venv/bin/pytest -q` passed
+  - Docs sync: completed for reliability, delivery runbooks, and planning artifacts
+  - Security/CI gates: enforced by mandatory PR pipeline (`pytest`, Bandit, pip-audit, Gitleaks, migration check)
+- Intentional deviations: none

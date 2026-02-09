@@ -70,7 +70,7 @@ Rules:
     - Local-run impact: local behavior includes dynamic availability recalculation after master schedule edits.
     - Delivered: master day-off management, lunch-break update flow, manual booking flow with ownership/conflict checks, and updated local smoke coverage for schedule-change scenarios.
 
-- EPIC-007 — Observability + reliability baseline — Status: IN_PROGRESS
+- EPIC-007 — Observability + reliability baseline — Status: DONE
     - Goal: add production-ready logging, metrics, backup/restore runbook, and basic alerts for single VM operations.
     - Acceptance:
         - Structured logs include key security and booking lifecycle events without secret leakage.
@@ -78,7 +78,7 @@ Rules:
         - Backup and restore procedure for PostgreSQL documented and validated in local/staging rehearsal.
     - Dependencies: EPIC-001, EPIC-002, EPIC-004, EPIC-006.
     - Local-run impact: compose and docs include observability endpoints plus backup/restore rehearsal commands.
-    - Delivered: Group 01 structured logs + metrics baseline, and Group 02 PostgreSQL backup/restore runbook with local clean-state rehearsal steps.
+    - Delivered: Group 01 structured logs + metrics baseline, Group 02 PostgreSQL backup/restore runbook with local clean-state rehearsal steps, and Group 03 minimal alert baseline + response notes.
 
 - EPIC-008 — Single-VM deployment baseline — Status: TODO
     - Goal: package and deploy the working bot stack onto one VM with documented rollback.

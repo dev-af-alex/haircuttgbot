@@ -20,4 +20,7 @@
 - Logs: structured application and security logs for booking/schedule actions.
 - Metrics: baseline implemented for API latency (`bot_api_request_latency_seconds`), request count (`bot_api_requests_total`), health (`bot_api_service_health`), and booking/schedule outcomes (`bot_api_booking_outcomes_total`).
 - Traces: TODO (if distributed components added beyond single service).
-- Alerts: TODO (service down, DB connectivity issues, high booking error rate).
+- Alerts baseline:
+  - `BotApiServiceDown` (`critical`): `bot_api_service_health < 1` for 2m.
+  - `BookingFailuresHigh` (`warning`): `sum(increase(bot_api_booking_outcomes_total{outcome="failure"}[15m])) >= 5` for 15m.
+  - Response notes and triage commands are documented in `docs/04-delivery/alerts-baseline.md`.

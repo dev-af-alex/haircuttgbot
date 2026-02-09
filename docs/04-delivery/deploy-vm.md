@@ -26,6 +26,11 @@ A single VM hosts the “working project”.
 - Keep minimum 7 daily copies on VM and push daily copy off-host.
 - Execute restore rehearsal regularly using `docs/04-delivery/postgresql-backup-restore.md`.
 
+## Alerting baseline
+
+- Track service health and booking/schedule failure spikes using rules from `docs/04-delivery/alerts-baseline.md`.
+- Route `critical` alerts to immediate on-call path; route `warning` alerts to operating-hours triage.
+
 ## Minimal deploy outline (fill in)
 
 1) Provision VM (TODO)

@@ -43,7 +43,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 2 dev-days
   - Dependencies: T-004
 
-- T-006 — Add minimal alert baseline and finalize doc sync — Status: TODO
+- T-006 — Add minimal alert baseline and finalize doc sync — Status: DONE
   - Scope: define alert thresholds/triggers for service-down and booking error spike; sync checklists/docs.
   - Acceptance:
     - alert rules and response notes are documented.

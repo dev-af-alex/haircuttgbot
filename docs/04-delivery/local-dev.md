@@ -252,3 +252,4 @@ PY`
 - Run host-side Python tooling via virtualenv binaries (for example: `.venv/bin/pytest`, `.venv/bin/bandit`).
 - Do not commit secrets or real bot tokens.
 - Backup rehearsal commands and retention baseline are documented in `docs/04-delivery/postgresql-backup-restore.md`.
+- Alert thresholds and incident response notes are documented in `docs/04-delivery/alerts-baseline.md`.
