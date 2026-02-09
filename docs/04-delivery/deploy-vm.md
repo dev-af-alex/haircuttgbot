@@ -100,7 +100,8 @@ The bundle must not include real secret values.
 - Deployment docs stay aligned with local runtime assumptions from `docs/04-delivery/local-dev.md`.
 - Smoke validation after deploy must include:
   - `/health` and `/metrics` availability
-  - bootstrap config validation (`BOOTSTRAP_MASTER_TELEGRAM_ID`) and baseline seed presence
+  - bootstrap config validation (`BOOTSTRAP_MASTER_TELEGRAM_ID`) and bootstrap-only initial seed baseline
+  - first-time `/start` auto-registration for non-preseeded Telegram user
   - client booking success + one-active-booking rejection path
   - master schedule update path (day-off/lunch/manual booking)
   - bootstrap master add/remove flow + non-bootstrap deny path
@@ -193,14 +194,14 @@ curl -fsS http://127.0.0.1:8080/metrics | grep -E 'bot_api_service_health|bot_ap
 docker compose --env-file /opt/haircuttgbot/shared/.env logs bot-api --tail=50 | grep '"event": "startup"'
 ```
 
-Then run the canonical smoke path from `docs/04-delivery/local-dev.md` against VM services (seed + booking/cancellation/schedule + bootstrap master add/remove scenario).
+Then run the canonical smoke path from `docs/04-delivery/local-dev.md` against VM services (bootstrap-only seed baseline + first-user auto-registration + booking/cancellation/schedule + bootstrap master add/remove scenario).
 When Telegram token is configured, additionally validate button-first chat flows:
-- `Client`: `/start` shows greeting and opens `Меню клиента` directly, then new booking + cancel booking via buttons.
+- `Client`: `/start` from non-preseeded user shows greeting, auto-registers user (`Client` role), and opens `Меню клиента` directly; then new booking + cancel booking via buttons.
 - `Client` mixed-duration check: `Стрижка` shows 30-minute slot range labels (for example `10:00-10:30`), `Стрижка + борода` remains hourly (`10:00-11:00`).
 - `Client` same-day guardrail: if now is `15:00`, slots earlier than `15:30` are not available/confirmable.
 - `Master`: `/start` shows greeting and opens `Меню мастера` directly, then schedule view + day-off + lunch update + manual booking + cancellation with reason via buttons; schedule view first requires date selection and outputs should use readable labels (`DD.MM.YYYY HH:MM`, `HH:MM-HH:MM`).
 - `Master` day-off guardrail: on date with active bookings, day-off action returns deterministic rejection about existing bookings.
-- `Bootstrap master`: `Управление мастерами` -> set target user's `users.telegram_username` -> add by `@nickname` (plus invalid/unknown rejection checks) -> remove same master.
+- `Bootstrap master`: `Управление мастерами` -> ensure target user has executed `/start` and has stored `users.telegram_username` -> add by `@nickname` (plus invalid/unknown rejection checks) -> remove same master.
 
 ### 6. Persist on reboot (systemd)
 
@@ -300,7 +301,8 @@ Use this checklist after every production deployment and rollback recovery.
 
 Run canonical smoke steps from `docs/04-delivery/local-dev.md`:
 
-- seed baseline data
+- seed baseline data (bootstrap-only initial user/master)
+- first-user `/start` auto-registration check
 - booking flow success + one-active-booking rejection
 - client cancellation + master cancellation-without-reason rejection
 - master day-off update

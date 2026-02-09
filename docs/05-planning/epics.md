@@ -195,3 +195,26 @@ Rules:
     - Dependencies: EPIC-013, EPIC-017.
     - Local-run impact: local/VM smoke updates bootstrap-master add flow to nickname-first input path and validation checks.
     - Delivered: Group 01 accepted ADR-0015 nickname-resolution policy plus manual nickname-input state and validation baseline; Group 02 delivered nickname-based add-master service/callback integration with bootstrap RBAC and audit reason outcomes preserved; Group 03 delivered regression coverage for success/invalid/unknown/ambiguous nickname paths and synchronized local/VM smoke runbooks.
+
+- EPIC-019 — Auto-registration on bot start + bootstrap-only initial user baseline — Status: DONE
+    - Goal: guarantee first contact in Telegram never fails with `Пользователь не найден` by auto-registering users on `/start`, persisting Telegram nickname in DB, and keeping first deployment user seed limited to bootstrap master only.
+    - Acceptance:
+        - Unknown Telegram user is created idempotently on `/start` with baseline `Client` role, while `BOOTSTRAP_MASTER_TELEGRAM_ID` keeps bootstrap-owner behavior.
+        - Telegram nickname is persisted in `users` at registration/start path and used as canonical identity attribute for nickname-based admin flows.
+        - Entry flow no longer returns `Пользователь не найден`; restricted actions still return deterministic RBAC deny responses.
+        - Fresh deploy baseline contains no pre-created users except the bootstrap master bound to `BOOTSTRAP_MASTER_TELEGRAM_ID`.
+        - Local and VM smoke include auto-registration verification for a new Telegram user and bootstrap-only initial-user count validation.
+    - Dependencies: EPIC-013, EPIC-017, EPIC-018.
+    - Local-run impact: seed/startup contract and smoke assertions shift from demo user pre-provisioning to runtime auto-registration.
+    - Delivered: Group 01 finalized ADR-0016 and bootstrap-only seed baseline without demo users; Group 02 delivered idempotent `/start` auto-registration with nickname persistence and no `Пользователь не найден` entry path; Group 03 added regression coverage and synchronized local/VM smoke runbooks for clean baseline and first-user registration checks.
+
+- EPIC-020 — Pre-deploy legacy cleanup + owner-only master rename flow — Status: TODO
+    - Goal: remove backward-compatibility code paths not required before first production deploy and add owner-only capability to change master display name.
+    - Acceptance:
+        - Legacy compatibility branches/adapters that target undeployed historical states are removed; service logic is refactored to one active baseline.
+        - Migration/seed/docs are aligned to greenfield-first deployment assumptions without extra compatibility scaffolding.
+        - Bootstrap owner master can change another master's display name through Telegram flow; non-owner masters receive deterministic deny.
+        - Master rename action is audit-logged and reflected in user-visible booking/schedule texts that show master identity.
+        - Regression and smoke coverage include rename success and deny scenarios after legacy cleanup.
+    - Dependencies: EPIC-018, EPIC-019.
+    - Local-run impact: compose smoke remains runnable while replacing compatibility checks with baseline-flow validations and owner rename checks.

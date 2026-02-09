@@ -24,6 +24,7 @@ def _setup_flow_schema() -> Engine:
                 CREATE TABLE users (
                     id INTEGER PRIMARY KEY,
                     telegram_user_id BIGINT UNIQUE NOT NULL,
+                    telegram_username TEXT,
                     role_id INTEGER NOT NULL
                 )
                 """
@@ -92,10 +93,10 @@ def _setup_flow_schema() -> Engine:
         conn.execute(
             text(
                 """
-                INSERT INTO users (id, telegram_user_id, role_id)
+                INSERT INTO users (id, telegram_user_id, telegram_username, role_id)
                 VALUES
-                    (10, 1000001, 2),
-                    (20, 2000001, 1)
+                    (10, 1000001, 'owner_master', 2),
+                    (20, 2000001, 'client_a', 1)
                 """
             )
         )

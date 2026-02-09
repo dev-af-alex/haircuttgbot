@@ -20,6 +20,7 @@ def _setup_schema() -> Engine:
                 CREATE TABLE users (
                     id INTEGER PRIMARY KEY,
                     telegram_user_id BIGINT UNIQUE NOT NULL,
+                    telegram_username TEXT,
                     role_id INTEGER NOT NULL
                 )
                 """
@@ -29,10 +30,10 @@ def _setup_schema() -> Engine:
         conn.execute(
             text(
                 """
-                INSERT INTO users (id, telegram_user_id, role_id)
+                INSERT INTO users (id, telegram_user_id, telegram_username, role_id)
                 VALUES
-                    (10, 1000001, 2),
-                    (20, 2000001, 1)
+                    (10, 1000001, 'owner_master', 2),
+                    (20, 2000001, 'client_a', 1)
                 """
             )
         )
@@ -87,3 +88,51 @@ def test_start_menu_routes_by_role() -> None:
 
     master_result = router.start_menu(telegram_user_id=1000001)
     assert "Меню мастера" in master_result.text
+
+
+def test_start_menu_auto_registers_unknown_user_with_client_role_and_username() -> None:
+    engine = _setup_schema()
+    router = TelegramCallbackRouter(engine)
+
+    result = router.start_menu(
+        telegram_user_id=3000001,
+        telegram_username="New_Client_User",
+    )
+
+    assert "Меню клиента" in result.text
+
+    with engine.begin() as conn:
+        row = conn.execute(
+            text(
+                """
+                SELECT r.name AS role_name, u.telegram_username
+                FROM users u
+                JOIN roles r ON r.id = u.role_id
+                WHERE u.telegram_user_id = 3000001
+                """
+            )
+        ).mappings().first()
+        assert row is not None
+        assert str(row["role_name"]) == "Client"
+        assert str(row["telegram_username"]) == "new_client_user"
+
+
+def test_start_menu_auto_registration_is_idempotent_and_preserves_existing_username() -> None:
+    engine = _setup_schema()
+    router = TelegramCallbackRouter(engine)
+
+    first = router.start_menu(telegram_user_id=3000002, telegram_username="same_user")
+    second = router.start_menu(telegram_user_id=3000002, telegram_username="CHANGED_NAME")
+
+    assert "Меню клиента" in first.text
+    assert "Меню клиента" in second.text
+
+    with engine.begin() as conn:
+        users_count = conn.execute(
+            text("SELECT count(*) FROM users WHERE telegram_user_id = 3000002")
+        ).scalar_one()
+        username = conn.execute(
+            text("SELECT telegram_username FROM users WHERE telegram_user_id = 3000002")
+        ).scalar_one()
+        assert users_count == 1
+        assert username == "same_user"

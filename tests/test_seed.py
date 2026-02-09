@@ -90,7 +90,10 @@ def test_run_seed_idempotency_with_file_backed_sqlite(tmp_path) -> None:
         assert bootstrap_role_id == master_role_id
 
         masters_count = conn.execute(text("SELECT count(*) FROM masters")).scalar_one()
-        assert masters_count >= 2
+        assert masters_count == 1
+
+        users_count = conn.execute(text("SELECT count(*) FROM users")).scalar_one()
+        assert users_count == 1
 
         bootstrap_master_name = conn.execute(
             text(
@@ -107,7 +110,7 @@ def test_run_seed_idempotency_with_file_backed_sqlite(tmp_path) -> None:
         bootstrap_username = conn.execute(
             text("SELECT telegram_username FROM users WHERE telegram_user_id = 1000001")
         ).scalar_one()
-        assert bootstrap_username == "master_1000001"
+        assert bootstrap_username is None
 
         service_rows = conn.execute(
             text(

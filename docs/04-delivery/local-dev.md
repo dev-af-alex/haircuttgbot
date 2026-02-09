@@ -21,7 +21,7 @@ A developer can run:
 1. `docker compose up -d --build`
 2. Verify migration completed successfully:
    `docker compose ps -a`
-3. Seed baseline data (2 masters):
+3. Seed baseline data (bootstrap owner only):
    `docker compose exec -T bot-api python -m app.db.seed`
 4. Wait until `bot-api`, `postgres`, and `redis` are healthy:
    `docker compose ps`
@@ -54,14 +54,15 @@ A developer can run:
    `curl -fsS http://127.0.0.1:8080/health`
 4. Check metrics endpoint and core metric families:
    `curl -fsS http://127.0.0.1:8080/metrics | grep -E 'bot_api_service_health|bot_api_requests_total|bot_api_request_latency_seconds|bot_api_booking_outcomes_total|bot_api_master_admin_outcomes_total|bot_api_abuse_outcomes_total|bot_api_telegram_delivery_outcomes_total'`
-5. Validate seed result (at least 2 masters):
+5. Validate clean first-deploy seed baseline (only bootstrap owner user/master before first organic `/start`):
+   `docker compose exec -T postgres psql -U haircuttgbot -d haircuttgbot -c "SELECT count(*) FROM users;"`
    `docker compose exec -T postgres psql -U haircuttgbot -d haircuttgbot -c "SELECT count(*) FROM masters;"`
 6. Validate seeded service catalog durations:
    `docker compose exec -T postgres psql -U haircuttgbot -d haircuttgbot -c "SELECT code, duration_minutes FROM services ORDER BY code;"`
 7. Confirm startup structured log exists:
    `docker compose logs bot-api --tail=200 | grep '"event": "startup"'`
 8. Validate functional smoke coverage via automated test suite (no inline scripts in docs):
-   `.venv/bin/pytest -q tests/test_health.py tests/test_idempotency.py tests/test_booking.py tests/test_telegram_master_callbacks.py tests/test_master_admin.py tests/test_throttling.py tests/test_observability.py`
+   `.venv/bin/pytest -q tests/test_health.py tests/test_idempotency.py tests/test_booking.py tests/test_telegram_callbacks.py tests/test_telegram_master_callbacks.py tests/test_master_admin.py tests/test_throttling.py tests/test_observability.py`
    - Coverage must include mixed-duration booking behavior (30-minute and 60-minute service scenarios) via `tests/test_booking.py` and callback flow tests.
 9. Rehearse PostgreSQL backup/restore once per release candidate (or when schema changes):
    follow `docs/04-delivery/postgresql-backup-restore.md`
@@ -78,9 +79,10 @@ Use this sequence when validating aiogram runtime against a real Telegram chat.
    - `docker compose exec -T bot-api python -m app.db.seed`
 3. Ensure polling runtime is active:
    - `docker compose logs bot-api --tail=200 | grep 'telegram_updates_runtime_started'`
-4. Map your Telegram user id to `Client` role (replace `YOUR_TG_ID`):
-   - `docker compose exec -T postgres psql -U haircuttgbot -d haircuttgbot -c "INSERT INTO roles (name) VALUES ('Client') ON CONFLICT (name) DO NOTHING; INSERT INTO users (telegram_user_id, role_id) VALUES (YOUR_TG_ID, (SELECT id FROM roles WHERE name='Client')) ON CONFLICT (telegram_user_id) DO UPDATE SET role_id = EXCLUDED.role_id;"`
-5. In Telegram chat with bot run `/start`, verify greeting + direct role landing to `Меню клиента`, then validate button-first client flow:
+4. In Telegram chat with bot run `/start` from a Telegram account that is not pre-seeded in DB:
+   - verify greeting + direct role landing to `Меню клиента`;
+   - optional DB check (replace `YOUR_TG_ID`): `docker compose exec -T postgres psql -U haircuttgbot -d haircuttgbot -c "SELECT telegram_user_id, telegram_username FROM users WHERE telegram_user_id=YOUR_TG_ID;"`
+5. Validate button-first client flow:
    - tap `Новая запись`;
    - choose master -> service -> date -> slot -> confirm;
    - then tap `Отменить запись` and confirm cancel for created booking.
@@ -90,8 +92,7 @@ Use this sequence when validating aiogram runtime against a real Telegram chat.
 7. Validate mixed-duration slot behavior in chat:
    - in `Новая запись`, choose `Стрижка` and confirm 30-minute slot range labels are present (for example `10:00-10:30`, `10:30-11:00`);
    - restart booking flow, choose `Стрижка + борода` and confirm hourly slot range labels (for example `10:00-11:00`, and no `10:30-11:30` starts).
-8. Optional master-role validation requires a second Telegram account:
-   - map second account to `Master` role and link to `masters.user_id` record;
+8. Optional master-role validation can be run with bootstrap master account (`BOOTSTRAP_MASTER_TELEGRAM_ID`):
    - run `/start`, verify greeting + direct role landing to `Меню мастера`, and validate buttons:
      - `Просмотр расписания`
      - `Выходной день`
@@ -108,9 +109,10 @@ Use this sequence when validating aiogram runtime against a real Telegram chat.
      - for an occupied date, `Выходной день` returns rejection text about existing active bookings.
 9. Optional bootstrap-master administration validation (same master account as `BOOTSTRAP_MASTER_TELEGRAM_ID`):
    - in `Мастер` menu open `Управление мастерами`;
-   - ensure target client has nickname in DB (replace `TARGET_TG_ID`, value must be lowercase without `@`):
-     - `docker compose exec -T postgres psql -U haircuttgbot -d haircuttgbot -c "UPDATE users SET telegram_username='candidate_master' WHERE telegram_user_id=TARGET_TG_ID;"`
-   - run `Добавить мастера`, send message `@candidate_master`, and check success message;
+   - ensure target client opened bot with `/start` at least once;
+   - verify target nickname captured in DB (replace `TARGET_TG_ID`):
+     - `docker compose exec -T postgres psql -U haircuttgbot -d haircuttgbot -c "SELECT telegram_username FROM users WHERE telegram_user_id=TARGET_TG_ID;"`
+   - run `Добавить мастера`, send message `@<captured_nickname>`, and check success message;
    - retry with invalid value (`candidate_master`) and check deterministic format rejection;
    - retry with unknown nickname (`@unknown_user`) and check deterministic not-found rejection;
    - run `Удалить мастера` for the same user and check success message;

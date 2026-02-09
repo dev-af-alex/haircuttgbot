@@ -306,8 +306,16 @@ class TelegramCallbackRouter:
     def seed_root_menu(self, telegram_user_id: int) -> None:
         self._state.set_menu(telegram_user_id, _MENU_ROOT, reset_context=True)
 
-    def start_menu(self, *, telegram_user_id: int) -> CallbackHandleResult:
-        role = self._roles.resolve_role(telegram_user_id)
+    def start_menu(
+        self,
+        *,
+        telegram_user_id: int,
+        telegram_username: str | None = None,
+    ) -> CallbackHandleResult:
+        role = self._roles.resolve_or_register_role_for_start(
+            telegram_user_id=telegram_user_id,
+            telegram_username=telegram_username,
+        )
         if role == "Client":
             self._state.set_menu(telegram_user_id, _MENU_CLIENT, reset_context=True)
             return CallbackHandleResult(

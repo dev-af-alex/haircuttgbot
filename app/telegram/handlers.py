@@ -45,7 +45,10 @@ def _callbacks() -> TelegramCallbackRouter:
 async def show_start(message: Message) -> None:
     if message.from_user is None:
         return
-    result = _callbacks().start_menu(telegram_user_id=message.from_user.id)
+    result = _callbacks().start_menu(
+        telegram_user_id=message.from_user.id,
+        telegram_username=message.from_user.username,
+    )
     await message.answer(result.text, reply_markup=result.reply_markup)
 
 
