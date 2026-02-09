@@ -98,4 +98,4 @@ Rules:
         - SLO/SLI targets and retention policy are defined with alert/runbook alignment.
     - Dependencies: EPIC-007, EPIC-008.
     - Local-run impact: compose runtime remains stable while adding protective middleware/config and updated smoke checks for rejection scenarios.
-    - Progress: Group 01 completed (`T-001`, `T-002`) with accepted abuse-protection ADR, Telegram command throttling middleware, and abuse outcome observability baseline.
+    - Progress: Group 01 completed (`T-001`, `T-002`) with accepted abuse-protection ADR, Telegram command throttling middleware, and abuse outcome observability baseline; Group 02 completed (`T-004`) with finalized secrets/TLS/SLO/retention policy documentation and deployment runbook synchronization.

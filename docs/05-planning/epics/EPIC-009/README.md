@@ -55,3 +55,13 @@ Close remaining MVP NFR gaps for abuse protection, secrets handling, retention p
 - Added structured deny event `abuse_throttle_deny` and abuse outcome metric `bot_api_abuse_outcomes_total`.
 - Updated architecture/NFR/delivery docs to reflect throttling behavior and metric contract.
 - Marked `T-001`, `T-002`, and `group-01` as `DONE`.
+
+## Delivered (Group 02)
+
+- Finalized MVP policy decisions for:
+  - secrets lifecycle and rotation cadence,
+  - TLS ingress baseline for single-VM deployment,
+  - SLO/error-budget and performance assumptions,
+  - privacy/security retention windows and deletion handling.
+- Synchronized delivery runbook with TLS and secrets-rotation operational baseline.
+- Marked `T-004` and `group-02` as `DONE`.

@@ -69,10 +69,23 @@ The bundle must not include real secret values.
 - Real secrets are provisioned only on the VM in `/opt/haircuttgbot/shared/.env`.
 - Repository stores only `.env.example` placeholders.
 - Secrets never appear in compose files, docs examples, or git history.
+- Secrets rotation baseline:
+  - rotate `TELEGRAM_BOT_TOKEN` and other external API credentials at least every 90 days;
+  - rotate immediately after any suspected exposure;
+  - after rotation, restart services and verify `/health`, `/metrics`, and smoke checks.
 - Minimum secret set:
   - `TELEGRAM_BOT_TOKEN`
   - `DATABASE_URL` (if not composed from service defaults)
   - any future third-party API keys
+
+## TLS ingress baseline
+
+- Public ingress to bot API must terminate TLS on reverse proxy (Nginx/Caddy/Traefik).
+- `443/tcp` is required for webhook/admin ingress; `80/tcp` should only be used for redirect or ACME challenge.
+- TLS certificate source:
+  - Let's Encrypt ACME with automatic renewal, or
+  - organization-managed certificate with tracked expiration/renewal owner.
+- Internal compose services (`8080`, `5432`, `6379`) remain non-public and reachable only on private host network paths.
 
 ## Operations baseline
 

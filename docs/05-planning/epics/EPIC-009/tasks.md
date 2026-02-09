@@ -27,7 +27,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 1 dev-day
   - Dependencies: T-002
 
-- T-004 — Finalize secrets/TLS/retention policy docs — Status: TODO
+- T-004 — Finalize secrets/TLS/retention policy docs — Status: DONE
   - Scope: close open TODOs in security/reliability/privacy/performance docs relevant to MVP operations.
   - Acceptance:
     - docs define secrets management lifecycle, TLS ingress policy, retention periods, and SLO targets.
