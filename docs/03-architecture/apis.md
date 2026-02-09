@@ -75,14 +75,16 @@ Telegram command contract baseline:
     `{"service_options":[{"code":"haircut","label":"Стрижка"},{"code":"beard","label":"Борода"},{"code":"haircut_beard","label":"Стрижка + борода"}]}`
 
 - `POST /internal/availability/slots`
-  - Purpose: return available 60-minute slots for selected master/date.
-  - Request: `{"master_id":1,"date":"2026-02-09"}`
+  - Purpose: return available slots for selected master/date, with optional service-duration awareness.
+  - Request (legacy-compatible): `{"master_id":1,"date":"2026-02-09"}`
+  - Request (service-aware): `{"master_id":1,"date":"2026-02-09","service_type":"haircut"}`
   - Response `200`:
-    `{"slot_minutes":60,"slots":[{"start_at":"2026-02-09T10:00:00+00:00","end_at":"2026-02-09T11:00:00+00:00"}]}`
+    `{"slot_minutes":30,"slots":[{"start_at":"2026-02-09T10:00:00+00:00","end_at":"2026-02-09T10:30:00+00:00"}]}`
   - Behavior notes:
     - Excludes occupied active bookings, availability blocks, and lunch interval.
     - Excludes past slots for the current day.
     - Uses half-open interval overlap semantics (`[start, end)`).
+    - If `service_type` is omitted, endpoint keeps 60-minute baseline slot generation for backward compatibility.
 
 - `POST /internal/booking/create`
   - Purpose: create a client booking for selected master/service/slot.
@@ -120,7 +122,8 @@ Telegram command contract baseline:
 
 - `POST /internal/telegram/client/booking-flow/select-service`
   - Purpose: move flow to slot selection after service/date choice.
-  - Request: `{"master_id":1,"date":"2026-02-12"}`
+  - Request (current baseline): `{"master_id":1,"date":"2026-02-12"}`
+  - Request (service-aware): `{"master_id":1,"date":"2026-02-12","service_type":"haircut"}`
   - Response `200`:
     `{"message":"Выберите доступный слот.","slots":[{"start_at":"2026-02-12T10:00:00+00:00","end_at":"2026-02-12T11:00:00+00:00"}]}`
 
@@ -189,6 +192,7 @@ Telegram command contract baseline:
   - Behavior notes:
     - Rejects invalid interval (`start_at >= end_at`).
     - Rejects overlapping day-off intervals for the same master.
+    - Day-off overlap checks use shared half-open interval predicate.
     - Updated day-off interval is immediately reflected in `POST /internal/availability/slots`.
 
 - `POST /internal/telegram/master/schedule/lunch`
@@ -224,7 +228,7 @@ Telegram command contract baseline:
     - Replay response includes header `X-Idempotency-Replayed: 1`.
   - Behavior notes:
     - Applies ownership check to target master profile.
-    - Rejects overlap with active bookings, day-off blocks, and lunch interval.
+    - Rejects overlap with active bookings, day-off blocks, and lunch interval using shared half-open interval predicate.
     - Created manual booking occupies slot for subsequent availability and booking checks.
 
 ## 5) Telegram delivery retry/error policy baseline (EPIC-010 group-02)

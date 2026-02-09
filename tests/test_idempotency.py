@@ -219,3 +219,72 @@ def test_telegram_idempotency_does_not_cache_rejected_write() -> None:
     assert second_body["created"] is False
     assert calls["count"] == 2
     assert after_rejected >= before_rejected + 2.0
+
+
+def test_telegram_idempotency_key_includes_service_type_for_variable_durations() -> None:
+    original_store = app.state.telegram_idempotency
+    original_throttle = app.state.telegram_throttle
+    app.state.telegram_idempotency = TelegramIdempotencyStore(window_seconds=120)
+    app.state.telegram_throttle = TelegramCommandThrottle(limit=100, window_seconds=60)
+
+    try:
+        payload_a = {
+            "client_telegram_user_id": 2000001,
+            "master_id": 1,
+            "service_type": "haircut",
+            "slot_start": "2026-02-13T10:00:00+00:00",
+        }
+        payload_b = {
+            "client_telegram_user_id": 2000001,
+            "master_id": 1,
+            "service_type": "haircut_beard",
+            "slot_start": "2026-02-13T10:00:00+00:00",
+        }
+        calls = {"count": 0}
+
+        class _DummyResponse:
+            def __init__(self, response_payload: dict[str, Any]) -> None:
+                self.status_code = 200
+                self.media_type = "application/json"
+                self.headers: dict[str, str] = {}
+
+                async def _iterate():
+                    yield json.dumps(response_payload).encode("utf-8")
+
+                self.body_iterator = _iterate()
+
+        async def call_next(_request: Request):
+            calls["count"] += 1
+            payload = {
+                "created": True,
+                "booking_id": 8000 + calls["count"],
+                "message": "ok",
+                "notifications": [],
+            }
+            return _DummyResponse(payload)
+
+        first = asyncio.run(
+            telegram_command_guards(
+                _build_request("/internal/telegram/client/booking-flow/confirm", payload_a),
+                call_next,
+            )
+        )
+        second = asyncio.run(
+            telegram_command_guards(
+                _build_request("/internal/telegram/client/booking-flow/confirm", payload_b),
+                call_next,
+            )
+        )
+    finally:
+        app.state.telegram_idempotency = original_store
+        app.state.telegram_throttle = original_throttle
+
+    first_body = json.loads(first.body.decode("utf-8"))
+    second_body = json.loads(second.body.decode("utf-8"))
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.headers.get("X-Idempotency-Replayed") is None
+    assert second.headers.get("X-Idempotency-Replayed") is None
+    assert first_body["booking_id"] != second_body["booking_id"]
+    assert calls["count"] == 2

@@ -6,8 +6,12 @@ from datetime import UTC, date, datetime, time, timedelta
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-SLOT_DURATION_MINUTES = 60
-SLOT_DURATION = timedelta(minutes=SLOT_DURATION_MINUTES)
+from app.booking.intervals import is_interval_blocked
+from app.booking.service_options import (
+    DEFAULT_SLOT_DURATION_MINUTES,
+    DEFAULT_SLOT_STEP_MINUTES,
+    resolve_service_duration_minutes,
+)
 
 
 @dataclass(frozen=True)
@@ -24,6 +28,7 @@ class AvailabilityService:
         self,
         master_id: int,
         on_date: date,
+        service_type: str | None = None,
         now: datetime | None = None,
     ) -> list[AvailabilitySlot]:
         """Return available [start, end) slots for a master/day."""
@@ -41,6 +46,17 @@ class AvailabilityService:
 
             if master is None:
                 return []
+
+            if service_type is not None:
+                duration_minutes = resolve_service_duration_minutes(service_type, connection=conn)
+                if duration_minutes is None:
+                    return []
+            else:
+                duration_minutes = DEFAULT_SLOT_DURATION_MINUTES
+            slot_duration = timedelta(minutes=duration_minutes)
+            slot_step = timedelta(
+                minutes=DEFAULT_SLOT_STEP_MINUTES if service_type is not None else DEFAULT_SLOT_DURATION_MINUTES
+            )
 
             work_start = _as_time(master["work_start"])
             work_end = _as_time(master["work_end"])
@@ -92,16 +108,16 @@ class AvailabilityService:
             slot_cutoff = datetime.combine(on_date, work_end, tzinfo=UTC)
 
             now_utc = _normalize_now(now)
-            while slot_start + SLOT_DURATION <= slot_cutoff:
-                slot_end = slot_start + SLOT_DURATION
+            while slot_start + slot_duration <= slot_cutoff:
+                slot_end = slot_start + slot_duration
                 if now_utc is not None and slot_start.date() == now_utc.date() and slot_start < now_utc:
-                    slot_start = slot_end
+                    slot_start = slot_start + slot_step
                     continue
 
-                if not _is_blocked(slot_start, slot_end, blocked_ranges):
+                if not is_interval_blocked(start_at=slot_start, end_at=slot_end, blocked_ranges=blocked_ranges):
                     slots.append(AvailabilitySlot(start_at=slot_start, end_at=slot_end))
 
-                slot_start = slot_end
+                slot_start = slot_start + slot_step
 
             return slots
 
@@ -112,14 +128,6 @@ def _normalize_now(now: datetime | None) -> datetime | None:
     if now.tzinfo is None:
         return now.replace(tzinfo=UTC)
     return now.astimezone(UTC)
-
-
-def _is_blocked(start_at: datetime, end_at: datetime, blocked_ranges: list[tuple[datetime, datetime]]) -> bool:
-    for blocked_start, blocked_end in blocked_ranges:
-        if start_at < blocked_end and blocked_start < end_at:
-            return True
-    return False
-
 
 def _as_time(value: time | str) -> time:
     if isinstance(value, time):

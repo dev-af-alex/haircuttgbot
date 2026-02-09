@@ -463,7 +463,8 @@ class TelegramCallbackRouter:
         if context is None or not _DATE_TOKEN_PATTERN.match(context):
             return self._invalid_response()
         master_id_raw = self._state.get_context_value(telegram_user_id, "master_id")
-        if master_id_raw is None:
+        service_type = self._state.get_context_value(telegram_user_id, "service_type")
+        if master_id_raw is None or service_type is None:
             return self._stale_response()
         try:
             master_id = int(master_id_raw)
@@ -471,7 +472,7 @@ class TelegramCallbackRouter:
         except ValueError:
             return self._invalid_response()
 
-        response = self._flow.select_service(master_id=master_id, on_date=on_date)
+        response = self._flow.select_service(master_id=master_id, on_date=on_date, service_type=service_type)
         slots = response.get("slots", [])
         if not isinstance(slots, list) or not slots:
             self._state.set_menu(telegram_user_id, _MENU_CLIENT_DATE_SELECT)
@@ -727,6 +728,9 @@ class TelegramCallbackRouter:
     def _handle_master_manual_select_date(self, telegram_user_id: int, context: str | None) -> CallbackHandleResult:
         if context is None or not _DATE_TOKEN_PATTERN.match(context):
             return self._invalid_response()
+        service_type = self._state.get_context_value(telegram_user_id, "master_manual_service")
+        if service_type is None:
+            return self._stale_response()
         try:
             on_date = _parse_date_token(context)
         except ValueError:
@@ -739,7 +743,11 @@ class TelegramCallbackRouter:
                 reply_markup=build_menu_markup(_MENU_MASTER),
             )
 
-        slots = self._flow.select_service(master_id=master_ctx.master_id, on_date=on_date).get("slots", [])
+        slots = self._flow.select_service(
+            master_id=master_ctx.master_id,
+            on_date=on_date,
+            service_type=service_type,
+        ).get("slots", [])
         if not isinstance(slots, list) or not slots:
             self._state.set_menu(telegram_user_id, _MENU_MASTER_MANUAL_DATE_SELECT)
             return CallbackHandleResult(

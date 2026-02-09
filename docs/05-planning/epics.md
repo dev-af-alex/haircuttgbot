@@ -141,7 +141,7 @@ Rules:
     - Local-run impact: `docker compose up -d` and smoke now require bootstrap master env configuration and verify idempotent baseline seed behavior.
     - Delivered: Group 01 finalized bootstrap provisioning ADR/env contract + idempotent startup seed with fail-fast validation; Group 02 delivered bootstrap-only master add/remove callback flows with audit events and dedicated metrics; Group 03 synchronized local/VM smoke docs, added master-admin regression coverage, and completed closure readiness checks.
 
-- EPIC-014 — Service duration model and variable-slot booking engine — Status: TODO
+- EPIC-014 — Service duration model and variable-slot booking engine — Status: DONE
     - Goal: move from fixed 60-minute slots to per-service durations (for example, haircut 30 min, haircut+beard 60 min) in availability, booking, and conflict checks.
     - Acceptance:
         - Service catalog stores configurable duration per service and default values cover baseline services.
@@ -150,6 +150,7 @@ Rules:
         - Smoke tests validate at least one 30-minute and one 60-minute service scenario end-to-end.
     - Dependencies: EPIC-004, EPIC-006, EPIC-010, EPIC-012.
     - Local-run impact: local verification expands from fixed-hour assumptions to mixed-duration slots and updated test fixtures.
+    - Delivered: Group 01 service catalog duration model + seed defaults, Group 02 duration-aware availability and shared overlap predicate enforcement, Group 03 interactive callback duration wiring + idempotency regression coverage + mixed-duration smoke/doc synchronization.
 
 - EPIC-015 — Localized readable time and final mobile UX polish — Status: TODO
     - Goal: deliver human-readable time/date messages and complete mobile-first Telegram interaction polish for client/master flows.

@@ -56,11 +56,14 @@ A developer can run:
    `curl -fsS http://127.0.0.1:8080/metrics | grep -E 'bot_api_service_health|bot_api_requests_total|bot_api_request_latency_seconds|bot_api_booking_outcomes_total|bot_api_master_admin_outcomes_total|bot_api_abuse_outcomes_total|bot_api_telegram_delivery_outcomes_total'`
 5. Validate seed result (at least 2 masters):
    `docker compose exec -T postgres psql -U haircuttgbot -d haircuttgbot -c "SELECT count(*) FROM masters;"`
-6. Confirm startup structured log exists:
+6. Validate seeded service catalog durations:
+   `docker compose exec -T postgres psql -U haircuttgbot -d haircuttgbot -c "SELECT code, duration_minutes FROM services ORDER BY code;"`
+7. Confirm startup structured log exists:
    `docker compose logs bot-api --tail=200 | grep '"event": "startup"'`
-7. Validate functional smoke coverage via automated test suite (no inline scripts in docs):
+8. Validate functional smoke coverage via automated test suite (no inline scripts in docs):
    `.venv/bin/pytest -q tests/test_health.py tests/test_idempotency.py tests/test_booking.py tests/test_telegram_master_callbacks.py tests/test_master_admin.py tests/test_throttling.py tests/test_observability.py`
-8. Rehearse PostgreSQL backup/restore once per release candidate (or when schema changes):
+   - Coverage must include mixed-duration booking behavior (30-minute and 60-minute service scenarios) via `tests/test_booking.py` and callback flow tests.
+9. Rehearse PostgreSQL backup/restore once per release candidate (or when schema changes):
    follow `docs/04-delivery/postgresql-backup-restore.md`
 
 ## Optional real Telegram validation (polling mode)
@@ -84,7 +87,10 @@ Use this sequence when validating aiogram runtime against a real Telegram chat.
 6. Validate key rejection path in chat:
    - create one future booking;
    - start a second booking attempt through buttons and confirm bot returns one-active-booking rejection.
-7. Optional master-role validation requires a second Telegram account:
+7. Validate mixed-duration slot behavior in chat:
+   - in `Новая запись`, choose `Стрижка` and confirm 30-minute slot options are present (for example `10:00`, `10:30`);
+   - restart booking flow, choose `Стрижка + борода` and confirm hourly slot options (no `:30` starts).
+8. Optional master-role validation requires a second Telegram account:
    - map second account to `Master` role and link to `masters.user_id` record;
    - run `/start`, tap `Мастер`, and validate buttons:
      - `Просмотр расписания`
@@ -92,12 +98,12 @@ Use this sequence when validating aiogram runtime against a real Telegram chat.
      - `Обед`
      - `Ручная запись`
      - `Отмена записи` (reason selection is mandatory).
-8. Optional bootstrap-master administration validation (same master account as `BOOTSTRAP_MASTER_TELEGRAM_ID`):
+9. Optional bootstrap-master administration validation (same master account as `BOOTSTRAP_MASTER_TELEGRAM_ID`):
    - in `Мастер` menu open `Управление мастерами`;
    - run `Добавить мастера` for one client user and check success message;
    - run `Удалить мастера` for the same user and check success message;
    - from non-bootstrap master account confirm deny response for admin actions.
-9. Stop stack:
+10. Stop stack:
    - `docker compose down`
 
 ## Notes

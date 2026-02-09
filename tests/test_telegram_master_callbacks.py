@@ -63,6 +63,19 @@ def _setup_flow_schema() -> Engine:
         conn.execute(
             text(
                 """
+                CREATE TABLE services (
+                    id INTEGER PRIMARY KEY,
+                    code TEXT UNIQUE NOT NULL,
+                    label_ru TEXT NOT NULL,
+                    duration_minutes INTEGER NOT NULL,
+                    is_active BOOLEAN NOT NULL
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
                 CREATE TABLE availability_blocks (
                     id INTEGER PRIMARY KEY,
                     master_id INTEGER NOT NULL,
@@ -94,6 +107,17 @@ def _setup_flow_schema() -> Engine:
                 VALUES
                     (1, 10, 'Master Demo 1', 1, '10:00:00', '21:00:00', '13:00:00', '14:00:00'),
                     (2, 11, 'Master Demo 2', 1, '10:00:00', '21:00:00', '13:00:00', '14:00:00')
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                INSERT INTO services (code, label_ru, duration_minutes, is_active)
+                VALUES
+                    ('haircut', 'Стрижка', 30, 1),
+                    ('beard', 'Борода', 30, 1),
+                    ('haircut_beard', 'Стрижка + борода', 60, 1)
                 """
             )
         )
@@ -165,6 +189,7 @@ def test_master_interactive_schedule_dayoff_lunch_manual_flow() -> None:
     result = router.handle(telegram_user_id=1000001, data=date_callbacks[1])
     slot_callbacks = _callbacks_for_action(result.reply_markup, "mbl")
     assert slot_callbacks
+    assert any(item.rsplit("|", 1)[-1].endswith("30") for item in slot_callbacks)
 
     result = router.handle(telegram_user_id=1000001, data=slot_callbacks[0])
     assert "Подтвердите ручную запись" in result.text

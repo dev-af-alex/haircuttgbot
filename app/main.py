@@ -16,12 +16,14 @@ from app.auth import RoleRepository, authorize_command
 from app.booking import (
     AvailabilityService,
     BookingService,
+    DEFAULT_SLOT_DURATION_MINUTES,
     MasterDayOffCommand,
     MasterLunchBreakCommand,
     MasterManualBookingCommand,
     MasterScheduleService,
     TelegramBookingFlowService,
     list_service_options,
+    resolve_service_duration_minutes,
 )
 from app.db.seed import (
     BOOTSTRAP_MASTER_TELEGRAM_ID_ENV,
@@ -392,6 +394,7 @@ class AuthorizeCommandRequest(BaseModel):
 class AvailabilityRequest(BaseModel):
     master_id: int
     date: date
+    service_type: str | None = None
 
 
 class CreateBookingRequest(BaseModel):
@@ -408,6 +411,7 @@ class TelegramFlowMasterRequest(BaseModel):
 class TelegramFlowServiceRequest(BaseModel):
     master_id: int
     date: date
+    service_type: str | None = None
 
 
 class TelegramFlowConfirmRequest(BaseModel):
@@ -502,10 +506,17 @@ def service_options() -> dict[str, list[dict[str, str]]]:
 @app.post("/internal/availability/slots")
 @instrument_endpoint("POST", "/internal/availability/slots")
 def availability_slots(payload: AvailabilityRequest) -> dict[str, int | list[dict[str, str]]]:
-    service = AvailabilityService(get_engine())
-    slots = service.list_slots(master_id=payload.master_id, on_date=payload.date)
+    engine = get_engine()
+    service = AvailabilityService(engine)
+    slots = service.list_slots(master_id=payload.master_id, on_date=payload.date, service_type=payload.service_type)
+    slot_minutes = DEFAULT_SLOT_DURATION_MINUTES
+    if payload.service_type is not None:
+        with engine.connect() as conn:
+            resolved = resolve_service_duration_minutes(payload.service_type, connection=conn)
+        if resolved is not None:
+            slot_minutes = resolved
     return {
-        "slot_minutes": 60,
+        "slot_minutes": slot_minutes,
         "slots": [
             {"start_at": slot.start_at.isoformat(), "end_at": slot.end_at.isoformat()}
             for slot in slots
@@ -563,7 +574,7 @@ def telegram_booking_flow_select_master(payload: TelegramFlowMasterRequest) -> d
 @instrument_endpoint("POST", "/internal/telegram/client/booking-flow/select-service")
 def telegram_booking_flow_select_service(payload: TelegramFlowServiceRequest) -> dict[str, object]:
     flow = TelegramBookingFlowService(get_engine())
-    return flow.select_service(master_id=payload.master_id, on_date=payload.date)
+    return flow.select_service(master_id=payload.master_id, on_date=payload.date, service_type=payload.service_type)
 
 
 @app.post("/internal/telegram/client/booking-flow/confirm")

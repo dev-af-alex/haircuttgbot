@@ -7,10 +7,9 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from app.booking.contracts import BOOKING_STATUS_ACTIVE
+from app.booking.intervals import sql_overlap_predicate
 from app.booking.messages import RU_BOOKING_MESSAGES
-from app.booking.service_options import SERVICE_OPTION_CODES
-
-SLOT_DURATION = timedelta(minutes=60)
+from app.booking.service_options import resolve_service_duration_minutes
 
 
 @dataclass(frozen=True)
@@ -33,14 +32,16 @@ class BookingService:
         slot_start: datetime,
         now: datetime | None = None,
     ) -> BookingCreateResult:
-        if service_type not in SERVICE_OPTION_CODES:
-            return BookingCreateResult(created=False, message=RU_BOOKING_MESSAGES["invalid_service_type"])
-
         slot_start_utc = _to_utc(slot_start)
-        slot_end_utc = slot_start_utc + SLOT_DURATION
         now_utc = _to_utc(now) if now is not None else datetime.now(UTC)
 
         with self._engine.begin() as conn:
+            duration_minutes = resolve_service_duration_minutes(service_type, connection=conn)
+            if duration_minutes is None:
+                return BookingCreateResult(created=False, message=RU_BOOKING_MESSAGES["invalid_service_type"])
+
+            slot_end_utc = slot_start_utc + timedelta(minutes=duration_minutes)
+
             master = conn.execute(
                 text(
                     """
@@ -117,8 +118,14 @@ class BookingService:
                     FROM bookings
                     WHERE master_id = :master_id
                       AND status = :status
-                      AND slot_start < :slot_end
-                      AND :slot_start < slot_end
+                      AND """
+                    + sql_overlap_predicate(
+                        start_column="slot_start",
+                        end_column="slot_end",
+                        start_param="slot_start",
+                        end_param="slot_end",
+                    )
+                    + """
                     LIMIT 1
                     """
                 ),
@@ -138,8 +145,14 @@ class BookingService:
                     SELECT 1
                     FROM availability_blocks
                     WHERE master_id = :master_id
-                      AND start_at < :slot_end
-                      AND :slot_start < end_at
+                      AND """
+                    + sql_overlap_predicate(
+                        start_column="start_at",
+                        end_column="end_at",
+                        start_param="slot_start",
+                        end_param="slot_end",
+                    )
+                    + """
                     LIMIT 1
                     """
                 ),

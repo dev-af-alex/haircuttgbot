@@ -4,6 +4,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Integer,
     String,
     Text,
     Time,
@@ -42,6 +43,18 @@ class Master(Base):
     lunch_start: Mapped[Time] = mapped_column(Time, nullable=False)
     lunch_end: Mapped[Time] = mapped_column(Time, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+
+
+class ServiceCatalog(Base):
+    __tablename__ = "services"
+    __table_args__ = (CheckConstraint("duration_minutes > 0", name="ck_services_duration_positive"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    label_ru: Mapped[str] = mapped_column(String(120), nullable=False)
+    duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
 class Booking(Base):

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import datetime
+from datetime import UTC
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
@@ -62,6 +63,19 @@ def _setup_flow_schema() -> Engine:
         conn.execute(
             text(
                 """
+                CREATE TABLE services (
+                    id INTEGER PRIMARY KEY,
+                    code TEXT UNIQUE NOT NULL,
+                    label_ru TEXT NOT NULL,
+                    duration_minutes INTEGER NOT NULL,
+                    is_active BOOLEAN NOT NULL
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
                 CREATE TABLE availability_blocks (
                     id INTEGER PRIMARY KEY,
                     master_id INTEGER NOT NULL,
@@ -93,6 +107,17 @@ def _setup_flow_schema() -> Engine:
                 """
             )
         )
+        conn.execute(
+            text(
+                """
+                INSERT INTO services (code, label_ru, duration_minutes, is_active)
+                VALUES
+                    ('haircut', 'Стрижка', 30, 1),
+                    ('beard', 'Борода', 30, 1),
+                    ('haircut_beard', 'Стрижка + борода', 60, 1)
+                """
+            )
+        )
 
     return engine
 
@@ -105,6 +130,15 @@ def _callbacks_for_action(markup, action: str) -> list[str]:
             if isinstance(callback_data, str) and callback_data.startswith(f"hb1|{action}"):
                 callbacks.append(callback_data)
     return callbacks
+
+
+def _slot_tokens(callbacks: list[str]) -> set[str]:
+    tokens: set[str] = set()
+    for callback_data in callbacks:
+        token = callback_data.rsplit("|", 1)[-1]
+        datetime.strptime(token, "%Y%m%d%H%M").replace(tzinfo=UTC)
+        tokens.add(token)
+    return tokens
 
 
 def _book_once(router: TelegramCallbackRouter, *, telegram_user_id: int) -> tuple[str, str]:
@@ -174,3 +208,65 @@ def test_client_interactive_flow_preserves_one_active_future_booking_limit() -> 
     result = router.handle(telegram_user_id=2000001, data="hb1|ccf")
 
     assert "активная будущая запись" in result.text
+
+
+def test_client_service_selection_controls_slot_granularity() -> None:
+    engine = _setup_flow_schema()
+    router = TelegramCallbackRouter(engine)
+    router.seed_root_menu(telegram_user_id=2000001)
+
+    result = router.handle(telegram_user_id=2000001, data="hb1|cm")
+    assert "Меню клиента" in result.text
+    result = router.handle(telegram_user_id=2000001, data="hb1|cb")
+    master_callbacks = _callbacks_for_action(result.reply_markup, "csm")
+    assert master_callbacks
+    result = router.handle(telegram_user_id=2000001, data=master_callbacks[0])
+    service_callbacks = _callbacks_for_action(result.reply_markup, "css")
+    haircut_callback = [item for item in service_callbacks if item.endswith("|haircut")]
+    combo_callback = [item for item in service_callbacks if item.endswith("|haircut_beard")]
+    assert haircut_callback and combo_callback
+
+    result = router.handle(telegram_user_id=2000001, data=haircut_callback[0])
+    date_callbacks = _callbacks_for_action(result.reply_markup, "csd")
+    assert len(date_callbacks) >= 2
+    date_token = date_callbacks[1].rsplit("|", 1)[-1]
+    target_date = datetime.strptime(date_token, "%Y%m%d").replace(tzinfo=UTC)
+
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO bookings (master_id, client_user_id, service_type, status, slot_start, slot_end)
+                VALUES (1, 2999, 'haircut', 'active', :slot_start, :slot_end)
+                """
+            ),
+            {
+                "slot_start": target_date.replace(hour=10, minute=30),
+                "slot_end": target_date.replace(hour=11, minute=0),
+            },
+        )
+
+    result = router.handle(telegram_user_id=2000001, data=date_callbacks[1])
+    haircut_slot_callbacks = _callbacks_for_action(result.reply_markup, "csl")
+    assert haircut_slot_callbacks
+    haircut_tokens = _slot_tokens(haircut_slot_callbacks)
+    assert any(token.endswith("1000") for token in haircut_tokens)
+
+    # Start a fresh booking attempt for 60-minute service.
+    router = TelegramCallbackRouter(engine)
+    router.seed_root_menu(telegram_user_id=2000001)
+    result = router.handle(telegram_user_id=2000001, data="hb1|cm")
+    result = router.handle(telegram_user_id=2000001, data="hb1|cb")
+    master_callbacks = _callbacks_for_action(result.reply_markup, "csm")
+    assert master_callbacks
+    result = router.handle(telegram_user_id=2000001, data=master_callbacks[0])
+    service_callbacks = _callbacks_for_action(result.reply_markup, "css")
+    combo_callback = [item for item in service_callbacks if item.endswith("|haircut_beard")]
+    assert combo_callback
+    result = router.handle(telegram_user_id=2000001, data=combo_callback[0])
+    date_callbacks = _callbacks_for_action(result.reply_markup, "csd")
+    result = router.handle(telegram_user_id=2000001, data=date_callbacks[1])
+    combo_slot_callbacks = _callbacks_for_action(result.reply_markup, "csl")
+    assert combo_slot_callbacks
+    combo_tokens = _slot_tokens(combo_slot_callbacks)
+    assert all(not token.endswith("1000") for token in combo_tokens)

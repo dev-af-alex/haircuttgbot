@@ -7,11 +7,11 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from app.booking.contracts import BOOKING_STATUS_ACTIVE
+from app.booking.intervals import sql_overlap_predicate
 from app.booking.messages import RU_BOOKING_MESSAGES
-from app.booking.service_options import SERVICE_OPTION_CODES
+from app.booking.service_options import resolve_service_duration_minutes
 
 BLOCK_TYPE_DAY_OFF = "day_off"
-SLOT_DURATION = timedelta(minutes=60)
 
 
 @dataclass(frozen=True)
@@ -121,8 +121,14 @@ class MasterScheduleService:
                     FROM availability_blocks
                     WHERE master_id = :master_id
                       AND block_type = :block_type
-                      AND start_at < :end_at
-                      AND :start_at < end_at
+                      AND """
+                    + sql_overlap_predicate(
+                        start_column="start_at",
+                        end_column="end_at",
+                        start_param="start_at",
+                        end_param="end_at",
+                    )
+                    + """
                       AND (:block_id IS NULL OR id <> :block_id)
                     LIMIT 1
                     """
@@ -286,13 +292,6 @@ class MasterScheduleService:
         master_telegram_user_id: int,
         command: MasterManualBookingCommand,
     ) -> MasterManualBookingResult:
-        if command.service_type not in SERVICE_OPTION_CODES:
-            return MasterManualBookingResult(
-                applied=False,
-                booking_id=None,
-                message=RU_BOOKING_MESSAGES["invalid_service_type"],
-            )
-
         context = self.resolve_context(master_telegram_user_id=master_telegram_user_id)
         if context is None:
             return MasterManualBookingResult(
@@ -302,9 +301,18 @@ class MasterScheduleService:
             )
 
         slot_start = _to_utc(command.slot_start)
-        slot_end = slot_start + SLOT_DURATION
 
         with self._engine.begin() as conn:
+            duration_minutes = resolve_service_duration_minutes(command.service_type, connection=conn)
+            if duration_minutes is None:
+                return MasterManualBookingResult(
+                    applied=False,
+                    booking_id=None,
+                    message=RU_BOOKING_MESSAGES["invalid_service_type"],
+                )
+
+            slot_end = slot_start + timedelta(minutes=duration_minutes)
+
             master = conn.execute(
                 text(
                     """
@@ -373,8 +381,14 @@ class MasterScheduleService:
                     FROM bookings
                     WHERE master_id = :master_id
                       AND status = :status
-                      AND slot_start < :slot_end
-                      AND :slot_start < slot_end
+                      AND """
+                    + sql_overlap_predicate(
+                        start_column="slot_start",
+                        end_column="slot_end",
+                        start_param="slot_start",
+                        end_param="slot_end",
+                    )
+                    + """
                     LIMIT 1
                     """
                 ),
@@ -398,8 +412,14 @@ class MasterScheduleService:
                     SELECT 1
                     FROM availability_blocks
                     WHERE master_id = :master_id
-                      AND start_at < :slot_end
-                      AND :slot_start < end_at
+                      AND """
+                    + sql_overlap_predicate(
+                        start_column="start_at",
+                        end_column="end_at",
+                        start_param="slot_start",
+                        end_param="slot_end",
+                    )
+                    + """
                     LIMIT 1
                     """
                 ),

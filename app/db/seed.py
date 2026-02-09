@@ -5,6 +5,8 @@ from datetime import time
 
 from sqlalchemy import create_engine, text
 
+from app.booking.service_options import list_service_catalog_defaults
+
 DEFAULT_DATABASE_URL = "postgresql+psycopg2://haircuttgbot:haircuttgbot@postgres:5432/haircuttgbot"
 BOOTSTRAP_MASTER_TELEGRAM_ID_ENV = "BOOTSTRAP_MASTER_TELEGRAM_ID"
 _DEFAULT_BOOTSTRAP_MASTER_DISPLAY_NAME = "Master Owner"
@@ -40,6 +42,7 @@ def _secondary_demo_master_telegram_id(bootstrap_master_telegram_id: int) -> int
 def run_seed(database_url: str, *, bootstrap_master_telegram_id: int) -> None:
     engine = create_engine(database_url, future=True)
     demo_master_telegram_id = _secondary_demo_master_telegram_id(bootstrap_master_telegram_id)
+    service_catalog = list_service_catalog_defaults()
 
     with engine.begin() as conn:
         conn.execute(
@@ -138,6 +141,20 @@ def run_seed(database_url: str, *, bootstrap_master_telegram_id: int) -> None:
                 "lunch_start": time(13, 0),
                 "lunch_end": time(14, 0),
             },
+        )
+
+        conn.execute(
+            text(
+                """
+                INSERT INTO services (code, label_ru, duration_minutes, is_active)
+                VALUES (:code, :label_ru, :duration_minutes, true)
+                ON CONFLICT (code) DO UPDATE
+                    SET label_ru = EXCLUDED.label_ru,
+                        duration_minutes = EXCLUDED.duration_minutes,
+                        is_active = true
+                """
+            ),
+            service_catalog,
         )
 
 

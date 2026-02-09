@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
@@ -25,8 +25,10 @@ from app.booking.schedule import (
 )
 from app.booking.service_options import (
     SERVICE_OPTION_CODES,
+    SERVICE_OPTION_DURATION_MINUTES,
     SERVICE_OPTION_LABELS_RU,
     list_service_options,
+    validate_duration_minutes,
 )
 
 sqlite3.register_adapter(datetime, lambda value: value.isoformat())
@@ -70,6 +72,19 @@ def _setup_availability_schema() -> Engine:
         conn.execute(
             text(
                 """
+                CREATE TABLE services (
+                    id INTEGER PRIMARY KEY,
+                    code TEXT UNIQUE NOT NULL,
+                    label_ru TEXT NOT NULL,
+                    duration_minutes INTEGER NOT NULL,
+                    is_active BOOLEAN NOT NULL
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
                 CREATE TABLE availability_blocks (
                     id INTEGER PRIMARY KEY,
                     master_id INTEGER NOT NULL,
@@ -87,6 +102,17 @@ def _setup_availability_schema() -> Engine:
                 """
                 INSERT INTO masters (id, user_id, is_active, work_start, work_end, lunch_start, lunch_end)
                 VALUES (1, 10, 1, '10:00:00', '21:00:00', '13:00:00', '14:00:00')
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                INSERT INTO services (code, label_ru, duration_minutes, is_active)
+                VALUES
+                    ('haircut', 'Стрижка', 30, 1),
+                    ('beard', 'Борода', 30, 1),
+                    ('haircut_beard', 'Стрижка + борода', 60, 1)
                 """
             )
         )
@@ -145,6 +171,19 @@ def _setup_telegram_flow_schema() -> Engine:
         conn.execute(
             text(
                 """
+                CREATE TABLE services (
+                    id INTEGER PRIMARY KEY,
+                    code TEXT UNIQUE NOT NULL,
+                    label_ru TEXT NOT NULL,
+                    duration_minutes INTEGER NOT NULL,
+                    is_active BOOLEAN NOT NULL
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
                 CREATE TABLE availability_blocks (
                     id INTEGER PRIMARY KEY,
                     master_id INTEGER NOT NULL,
@@ -179,6 +218,17 @@ def _setup_telegram_flow_schema() -> Engine:
                 """
             )
         )
+        conn.execute(
+            text(
+                """
+                INSERT INTO services (code, label_ru, duration_minutes, is_active)
+                VALUES
+                    ('haircut', 'Стрижка', 30, 1),
+                    ('beard', 'Борода', 30, 1),
+                    ('haircut_beard', 'Стрижка + борода', 60, 1)
+                """
+            )
+        )
 
     return engine
 
@@ -188,6 +238,20 @@ def test_service_options_contract() -> None:
 
     assert [item["code"] for item in options] == list(SERVICE_OPTION_CODES)
     assert {item["code"]: item["label"] for item in options} == SERVICE_OPTION_LABELS_RU
+    assert set(SERVICE_OPTION_DURATION_MINUTES) == set(SERVICE_OPTION_CODES)
+    assert all(minutes > 0 for minutes in SERVICE_OPTION_DURATION_MINUTES.values())
+
+
+def test_validate_duration_minutes_contract() -> None:
+    assert validate_duration_minutes(30) == 30
+    assert validate_duration_minutes(60) == 60
+
+    for invalid in (0, -1, True, False, 30.0, "30", None):
+        try:
+            validate_duration_minutes(invalid)
+            raise AssertionError("expected ValueError for invalid duration")
+        except ValueError:
+            pass
 
 
 def test_availability_excludes_past_lunch_booking_and_blocks() -> None:
@@ -263,6 +327,56 @@ def test_availability_half_open_overlap_boundaries() -> None:
 
     assert "15:00" in starts
     assert "16:00" not in starts
+
+
+def test_availability_supports_duration_aware_service_slots() -> None:
+    engine = _setup_availability_schema()
+
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO bookings (master_id, client_user_id, service_type, status, slot_start, slot_end)
+                VALUES (1, 7001, 'haircut', 'active', :slot_start, :slot_end)
+                """
+            ),
+            {
+                "slot_start": datetime(2026, 2, 11, 10, 30, tzinfo=UTC),
+                "slot_end": datetime(2026, 2, 11, 11, 0, tzinfo=UTC),
+            },
+        )
+
+    service = AvailabilityService(engine)
+
+    haircut_slots = service.list_slots(
+        master_id=1,
+        on_date=date(2026, 2, 11),
+        service_type="haircut",
+        now=datetime(2026, 2, 11, 9, 0, tzinfo=UTC),
+    )
+    haircut_starts = {slot.start_at.strftime("%H:%M") for slot in haircut_slots}
+    assert "10:00" in haircut_starts
+    assert "10:30" not in haircut_starts
+    assert "11:00" in haircut_starts
+
+    combo_slots = service.list_slots(
+        master_id=1,
+        on_date=date(2026, 2, 11),
+        service_type="haircut_beard",
+        now=datetime(2026, 2, 11, 9, 0, tzinfo=UTC),
+    )
+    combo_starts = {slot.start_at.strftime("%H:%M") for slot in combo_slots}
+    assert "10:00" not in combo_starts
+    assert "10:30" not in combo_starts
+    assert "11:00" in combo_starts
+
+    invalid_slots = service.list_slots(
+        master_id=1,
+        on_date=date(2026, 2, 11),
+        service_type="invalid",
+        now=datetime(2026, 2, 11, 9, 0, tzinfo=UTC),
+    )
+    assert invalid_slots == []
 
 
 def test_create_booking_success() -> None:
@@ -356,6 +470,39 @@ def test_create_booking_rejects_second_future_booking_for_client() -> None:
 
     assert result.created is False
     assert "активная будущая" in result.message
+
+
+def test_create_booking_respects_variable_service_duration_conflicts() -> None:
+    engine = _setup_telegram_flow_schema()
+    service = BookingService(engine)
+
+    first = service.create_booking(
+        master_id=1,
+        client_user_id=2001,
+        service_type="haircut",
+        slot_start=datetime(2026, 2, 10, 12, 0, tzinfo=UTC),
+        now=datetime(2026, 2, 9, 10, 0, tzinfo=UTC),
+    )
+    assert first.created is True
+
+    second = service.create_booking(
+        master_id=1,
+        client_user_id=2002,
+        service_type="beard",
+        slot_start=datetime(2026, 2, 10, 12, 30, tzinfo=UTC),
+        now=datetime(2026, 2, 9, 10, 0, tzinfo=UTC),
+    )
+    assert second.created is True
+
+    overlapping = service.create_booking(
+        master_id=1,
+        client_user_id=2003,
+        service_type="haircut_beard",
+        slot_start=datetime(2026, 2, 10, 12, 15, tzinfo=UTC),
+        now=datetime(2026, 2, 9, 10, 0, tzinfo=UTC),
+    )
+    assert overlapping.created is False
+    assert "недоступен" in overlapping.message.lower()
 
 
 def test_cancellation_contract_baseline() -> None:
@@ -775,7 +922,7 @@ def test_master_manual_booking_rejects_overlap_and_unavailable_slots() -> None:
         command=MasterManualBookingCommand(
             client_name="Offline Client 2",
             service_type="beard",
-            slot_start=datetime(2026, 2, 16, 12, 30, tzinfo=UTC),
+            slot_start=datetime(2026, 2, 16, 12, 15, tzinfo=UTC),
         ),
     )
     assert overlap.applied is False
@@ -841,6 +988,34 @@ def test_telegram_booking_flow_start_and_select_steps() -> None:
     slots = select_service_payload["slots"]
     assert isinstance(slots, list)
     assert len(slots) > 0
+
+    select_service_haircut = flow.select_service(
+        master_id=1,
+        on_date=date(2026, 2, 12),
+        service_type="haircut",
+    )
+    haircut_slots = select_service_haircut["slots"]
+    assert isinstance(haircut_slots, list)
+    assert len(haircut_slots) > 0
+    assert any(
+        datetime.fromisoformat(item["start_at"]).minute == 30  # type: ignore[index]
+        for item in haircut_slots
+        if isinstance(item, dict) and "start_at" in item
+    )
+
+    select_service_combo = flow.select_service(
+        master_id=1,
+        on_date=date(2026, 2, 12),
+        service_type="haircut_beard",
+    )
+    combo_slots = select_service_combo["slots"]
+    assert isinstance(combo_slots, list)
+    assert len(combo_slots) > 0
+    assert all(
+        datetime.fromisoformat(item["end_at"]) - datetime.fromisoformat(item["start_at"]) == timedelta(minutes=60)  # type: ignore[index]
+        for item in combo_slots
+        if isinstance(item, dict) and "start_at" in item
+    )
 
 
 def test_telegram_booking_flow_confirm_sends_notifications_and_rejects_second_future_booking() -> None:
