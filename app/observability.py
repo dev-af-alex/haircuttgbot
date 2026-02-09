@@ -32,6 +32,12 @@ _ABUSE_OUTCOMES_TOTAL: dict[tuple[str, str], float] = {}
 _SERVICE_HEALTH = 1.0
 
 
+def _coerce_buckets(value: float | list[float]) -> list[float]:
+    if isinstance(value, list):
+        return value
+    raise TypeError("Invalid latency buckets payload; expected list[float].")
+
+
 def _is_sensitive_key(key: str) -> bool:
     key_normalized = key.strip().lower()
     if key_normalized.endswith("_configured"):
@@ -101,8 +107,7 @@ def observe_request(method: str, path: str, status_code: str, duration_seconds: 
         series["count"] = float(series["count"]) + 1.0
         series["sum"] = float(series["sum"]) + duration_seconds
 
-        buckets = series["buckets"]
-        assert isinstance(buckets, list)
+        buckets = _coerce_buckets(series["buckets"])
         for index, boundary in enumerate(_REQUEST_LATENCY_BUCKETS):
             if duration_seconds <= boundary:
                 buckets[index] += 1.0
@@ -144,8 +149,7 @@ def render_metrics() -> tuple[bytes, str]:
         lines.append("# HELP bot_api_request_latency_seconds HTTP request latency in seconds.")
         lines.append("# TYPE bot_api_request_latency_seconds histogram")
         for (method, path), series in sorted(_REQUEST_LATENCY.items()):
-            buckets = series["buckets"]
-            assert isinstance(buckets, list)
+            buckets = _coerce_buckets(series["buckets"])
             count = float(series["count"])
             total = float(series["sum"])
             for index, boundary in enumerate(_REQUEST_LATENCY_BUCKETS):
