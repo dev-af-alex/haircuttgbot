@@ -100,7 +100,7 @@ Rules:
     - Local-run impact: compose runtime remains stable while adding protective middleware/config and updated smoke checks for rejection scenarios.
     - Delivered: Group 01 accepted abuse-protection ADR + Telegram command throttling middleware + abuse observability baseline; Group 02 finalized secrets/TLS/SLO/retention policy docs and deployment-runbook synchronization; Group 03 smoke hardening for throttle rejection and final closure sync.
 
-- EPIC-010 — Telegram delivery reliability hardening — Status: IN_PROGRESS
+- EPIC-010 — Telegram delivery reliability hardening — Status: DONE
     - Goal: harden Telegram integration for webhook retries, idempotent command handling, and controlled failure behavior under external API constraints.
     - Acceptance:
         - command handling is idempotent for repeated Telegram deliveries in retry windows.
@@ -108,4 +108,4 @@ Rules:
         - local smoke path includes at least one duplicate-delivery validation scenario.
     - Dependencies: EPIC-003, EPIC-007, EPIC-009.
     - Local-run impact: local compose run remains stable while adding duplicate-delivery guards and retry-oriented observability checks.
-    - Progress: Group 01 completed (`T-001`, `T-002`) with accepted delivery-idempotency ADR, Telegram write-path replay guard, and baseline replay test coverage.
+    - Delivered: Group 01 delivered accepted delivery-idempotency ADR + Telegram write-path replay guard + baseline replay tests; Group 02 delivered retry/error outcome classification + delivery observability metric/event mapping + duplicate-delivery smoke expansion; Group 03 delivered closure doc-sync and merge-gate readiness checks for epic close-out.

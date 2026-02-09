@@ -85,6 +85,42 @@ class _DummyConfirmFlowService:
         }
 
 
+class _DummyRejectFlowService:
+    calls = 0
+
+    def __init__(self, _engine) -> None:
+        pass
+
+    def confirm(
+        self,
+        *,
+        client_telegram_user_id: int,
+        master_id: int,
+        service_type: str,
+        slot_start,
+    ) -> dict[str, object]:
+        _ = client_telegram_user_id
+        _ = master_id
+        _ = service_type
+        _ = slot_start
+        self.__class__.calls += 1
+        return {
+            "created": False,
+            "booking_id": None,
+            "message": "slot is not available",
+            "notifications": [],
+        }
+
+
+def _metric_value(exposition: str, metric_name: str, labels: dict[str, str], default: float = 0.0) -> float:
+    for line in exposition.splitlines():
+        if not line.startswith(f"{metric_name}{{"):
+            continue
+        if all(f'{key}="{value}"' in line for key, value in labels.items()):
+            return float(line.rsplit(" ", 1)[1])
+    return default
+
+
 def test_telegram_idempotency_replays_successful_write(monkeypatch) -> None:
     monkeypatch.setattr("app.main.TelegramBookingFlowService", _DummyConfirmFlowService)
     _DummyConfirmFlowService.calls = 0
@@ -93,6 +129,26 @@ def test_telegram_idempotency_replays_successful_write(monkeypatch) -> None:
     app.state.telegram_idempotency = TelegramIdempotencyStore(window_seconds=120)
 
     try:
+        before_status, _, before_metrics_body = _asgi_request("GET", "/metrics")
+        assert before_status == 200
+        before_metrics = before_metrics_body.decode("utf-8")
+        before_processed = _metric_value(
+            before_metrics,
+            "bot_api_telegram_delivery_outcomes_total",
+            {
+                "path": "/internal/telegram/client/booking-flow/confirm",
+                "outcome": "processed_success",
+            },
+        )
+        before_replayed = _metric_value(
+            before_metrics,
+            "bot_api_telegram_delivery_outcomes_total",
+            {
+                "path": "/internal/telegram/client/booking-flow/confirm",
+                "outcome": "replayed",
+            },
+        )
+
         payload = {
             "client_telegram_user_id": 2000001,
             "master_id": 1,
@@ -110,11 +166,30 @@ def test_telegram_idempotency_replays_successful_write(monkeypatch) -> None:
             "/internal/telegram/client/booking-flow/confirm",
             payload,
         )
+        after_status, _, after_metrics_body = _asgi_request("GET", "/metrics")
+        assert after_status == 200
     finally:
         app.state.telegram_idempotency = original_store
 
     first_json = json.loads(first_body.decode("utf-8"))
     second_json = json.loads(second_body.decode("utf-8"))
+    after_metrics = after_metrics_body.decode("utf-8")
+    after_processed = _metric_value(
+        after_metrics,
+        "bot_api_telegram_delivery_outcomes_total",
+        {
+            "path": "/internal/telegram/client/booking-flow/confirm",
+            "outcome": "processed_success",
+        },
+    )
+    after_replayed = _metric_value(
+        after_metrics,
+        "bot_api_telegram_delivery_outcomes_total",
+        {
+            "path": "/internal/telegram/client/booking-flow/confirm",
+            "outcome": "replayed",
+        },
+    )
 
     assert first_status == 200
     assert second_status == 200
@@ -124,3 +199,68 @@ def test_telegram_idempotency_replays_successful_write(monkeypatch) -> None:
     assert second_json["created"] is True
     assert first_json["booking_id"] == second_json["booking_id"]
     assert _DummyConfirmFlowService.calls == 1
+    assert after_processed >= before_processed + 1.0
+    assert after_replayed >= before_replayed + 1.0
+
+
+def test_telegram_idempotency_does_not_cache_rejected_write(monkeypatch) -> None:
+    monkeypatch.setattr("app.main.TelegramBookingFlowService", _DummyRejectFlowService)
+    _DummyRejectFlowService.calls = 0
+
+    original_store = app.state.telegram_idempotency
+    app.state.telegram_idempotency = TelegramIdempotencyStore(window_seconds=120)
+
+    try:
+        before_status, _, before_metrics_body = _asgi_request("GET", "/metrics")
+        assert before_status == 200
+        before_metrics = before_metrics_body.decode("utf-8")
+        before_rejected = _metric_value(
+            before_metrics,
+            "bot_api_telegram_delivery_outcomes_total",
+            {
+                "path": "/internal/telegram/client/booking-flow/confirm",
+                "outcome": "processed_rejected",
+            },
+        )
+
+        payload = {
+            "client_telegram_user_id": 2000002,
+            "master_id": 1,
+            "service_type": "haircut",
+            "slot_start": "2026-02-13T11:00:00+00:00",
+        }
+        first_status, first_headers, first_body = _asgi_request(
+            "POST",
+            "/internal/telegram/client/booking-flow/confirm",
+            payload,
+        )
+        second_status, second_headers, second_body = _asgi_request(
+            "POST",
+            "/internal/telegram/client/booking-flow/confirm",
+            payload,
+        )
+        after_status, _, after_metrics_body = _asgi_request("GET", "/metrics")
+        assert after_status == 200
+    finally:
+        app.state.telegram_idempotency = original_store
+
+    first_json = json.loads(first_body.decode("utf-8"))
+    second_json = json.loads(second_body.decode("utf-8"))
+    after_metrics = after_metrics_body.decode("utf-8")
+    after_rejected = _metric_value(
+        after_metrics,
+        "bot_api_telegram_delivery_outcomes_total",
+        {
+            "path": "/internal/telegram/client/booking-flow/confirm",
+            "outcome": "processed_rejected",
+        },
+    )
+
+    assert first_status == 200
+    assert second_status == 200
+    assert first_headers.get("x-idempotency-replayed") is None
+    assert second_headers.get("x-idempotency-replayed") is None
+    assert first_json["created"] is False
+    assert second_json["created"] is False
+    assert _DummyRejectFlowService.calls == 2
+    assert after_rejected >= before_rejected + 2.0

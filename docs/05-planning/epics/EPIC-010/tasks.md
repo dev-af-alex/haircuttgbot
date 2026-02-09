@@ -19,7 +19,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 2 dev-days
   - Dependencies: T-001
 
-- T-003 — Add tests and smoke coverage for duplicate deliveries — Status: TODO
+- T-003 — Add tests and smoke coverage for duplicate deliveries — Status: DONE
   - Scope: extend unit/integration tests and local smoke to include duplicate delivery scenario.
   - Acceptance:
     - automated tests cover initial delivery and replay behavior.
@@ -27,7 +27,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 1 dev-day
   - Dependencies: T-002
 
-- T-004 — Formalize retry/error policy and observability mapping — Status: TODO
+- T-004 — Formalize retry/error policy and observability mapping — Status: DONE
   - Scope: document and implement retry behavior by failure class with metrics/log events for delivery outcomes.
   - Acceptance:
     - policy defines transient vs terminal failures and retry action.
@@ -35,7 +35,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 2 dev-days
   - Dependencies: T-001
 
-- T-005 — Final doc-sync and epic closure checks — Status: TODO
+- T-005 — Final doc-sync and epic closure checks — Status: DONE
   - Scope: complete planning sync and validate merge gates for EPIC-010 closure.
   - Acceptance:
     - epic roadmap/workspace statuses reflect delivered work.

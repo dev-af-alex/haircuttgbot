@@ -33,6 +33,8 @@
     - `bot_api_request_latency_seconds{method,path}` histogram.
     - `bot_api_booking_outcomes_total{action,outcome}` counter.
     - `bot_api_abuse_outcomes_total{path,outcome}` counter (`allow`/`deny` for Telegram throttling checks).
+    - `bot_api_telegram_delivery_outcomes_total{path,outcome}` counter
+      (`processed_success`, `processed_rejected`, `replayed`, `throttled`, `failed_transient`, `failed_terminal`).
 
 - `POST /internal/auth/resolve-role`
   - Purpose: resolve role by `telegram_user_id` from DB mapping.
@@ -202,7 +204,23 @@
     - Rejects overlap with active bookings, day-off blocks, and lunch interval.
     - Created manual booking occupies slot for subsequent availability and booking checks.
 
-## 5) Observability event schema (EPIC-007 group-01)
+## 5) Telegram delivery retry/error policy baseline (EPIC-010 group-02)
+
+- Scope: Telegram write-side endpoints guarded by idempotency middleware.
+- Outcome classes:
+  - `processed_success`: successful write-side effect (`created/cancelled/applied == true`); terminal, no retry.
+  - `processed_rejected`: business-rule rejection (`created/cancelled/applied == false`); terminal, no retry.
+  - `replayed`: duplicate delivery answered from idempotency cache; terminal, no retry.
+  - `throttled`: abuse-throttle deny (`429`); retriable after `retry_after_seconds`.
+  - `failed_transient`: server-side/transient failure (`5xx` or middleware-caught exception); retriable.
+  - `failed_terminal`: non-retriable response outside the classes above.
+- Observability mapping:
+  - Metric: `bot_api_telegram_delivery_outcomes_total{path,outcome}`.
+  - Event: `telegram_delivery_outcome` with fields
+    `telegram_user_id`, `path`, `method`, `status_code`, `outcome`, `retry_recommended`.
+  - Replay-specific event remains: `telegram_idempotency_replay`.
+
+## 6) Observability event schema
 
 - Structured log baseline:
   - Every event is a JSON object with at least: `event`, `service`, `ts`.
@@ -220,6 +238,8 @@
   - `schedule_manual_booking`
   - `abuse_throttle_deny`
   - `telegram_idempotency_replay`
+  - `telegram_delivery_outcome`
+  - `telegram_delivery_error`
 - Redaction policy:
   - Keys containing `token`, `secret`, `password`, `authorization`, `api_key`, `database_url` are replaced with `[REDACTED]`.
   - Raw `TELEGRAM_BOT_TOKEN` value is masked from any string field if present.

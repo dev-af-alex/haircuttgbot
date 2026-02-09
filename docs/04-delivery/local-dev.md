@@ -50,7 +50,7 @@ A developer can run:
 3. Check API health endpoint:
    `curl -fsS http://127.0.0.1:8080/health`
 4. Check metrics endpoint and core metric families:
-   `curl -fsS http://127.0.0.1:8080/metrics | grep -E 'bot_api_service_health|bot_api_requests_total|bot_api_request_latency_seconds|bot_api_booking_outcomes_total|bot_api_abuse_outcomes_total'`
+   `curl -fsS http://127.0.0.1:8080/metrics | grep -E 'bot_api_service_health|bot_api_requests_total|bot_api_request_latency_seconds|bot_api_booking_outcomes_total|bot_api_abuse_outcomes_total|bot_api_telegram_delivery_outcomes_total'`
 5. Validate seed result (at least 2 masters):
    `docker compose exec -T postgres psql -U haircuttgbot -d haircuttgbot -c "SELECT count(*) FROM masters;"`
 6. Confirm startup structured log exists:
@@ -150,6 +150,9 @@ req = urllib.request.Request(
     headers={"Content-Type": "application/json"},
 )
 first = json.loads(urllib.request.urlopen(req).read().decode())
+with urllib.request.urlopen(req) as replay_response:
+    replayed = json.loads(replay_response.read().decode())
+    replay_header = replay_response.headers.get("X-Idempotency-Replayed")
 payload["slot_start"] = slot_2
 second_req = urllib.request.Request(
     "http://127.0.0.1:8080/internal/telegram/client/booking-flow/confirm",
@@ -158,6 +161,9 @@ second_req = urllib.request.Request(
 )
 second = json.loads(urllib.request.urlopen(second_req).read().decode())
 assert first["created"] is True
+assert replayed["created"] is True
+assert replayed["booking_id"] == first["booking_id"]
+assert replay_header == "1"
 assert second["created"] is False
 
 cancel_req = urllib.request.Request(
@@ -282,6 +288,8 @@ assert throttle_last_body["code"] == "throttled"
 print(
     {
         "first": first,
+        "replayed": replayed,
+        "replay_header": replay_header,
         "second": second,
         "cancelled": cancelled,
         "third": third,

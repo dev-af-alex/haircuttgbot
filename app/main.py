@@ -28,6 +28,7 @@ from app.observability import (
     emit_event,
     instrument_endpoint,
     observe_abuse_outcome,
+    observe_telegram_delivery_outcome,
     render_metrics,
     set_service_health,
 )
@@ -85,6 +86,48 @@ def _extract_telegram_user_id(payload: Any) -> int | None:
     return None
 
 
+def _classify_delivery_outcome(
+    *,
+    status_code: int,
+    response_payload: dict[str, Any] | None,
+    outcome_key: str,
+) -> tuple[str, bool]:
+    if status_code == 429:
+        return "throttled", True
+    if status_code >= 500:
+        return "failed_transient", True
+    if status_code != 200:
+        return "failed_terminal", False
+    if response_payload is None:
+        return "failed_terminal", False
+    if response_payload.get(outcome_key) is True:
+        return "processed_success", False
+    if response_payload.get(outcome_key) is False:
+        return "processed_rejected", False
+    return "failed_terminal", False
+
+
+def _observe_delivery_policy(
+    *,
+    path: str,
+    telegram_user_id: int,
+    method: str,
+    status_code: int,
+    outcome: str,
+    retry_recommended: bool,
+) -> None:
+    observe_telegram_delivery_outcome(path=path, outcome=outcome)
+    emit_event(
+        "telegram_delivery_outcome",
+        telegram_user_id=telegram_user_id,
+        path=path,
+        method=method,
+        status_code=status_code,
+        outcome=outcome,
+        retry_recommended=retry_recommended,
+    )
+
+
 @app.middleware("http")
 async def telegram_command_guards(request: Request, call_next):  # type: ignore[no-untyped-def]
     if request.method not in _THROTTLED_METHODS or not request.url.path.startswith(_THROTTLED_PATH_PREFIX):
@@ -119,6 +162,14 @@ async def telegram_command_guards(request: Request, call_next):  # type: ignore[
                 path=request.url.path,
                 idempotency_window_seconds=app.state.telegram_idempotency.window_seconds,
             )
+            _observe_delivery_policy(
+                path=request.url.path,
+                telegram_user_id=telegram_user_id,
+                method=request.method,
+                status_code=cached.status_code,
+                outcome="replayed",
+                retry_recommended=False,
+            )
             return Response(
                 content=cached.body,
                 status_code=cached.status_code,
@@ -139,6 +190,15 @@ async def telegram_command_guards(request: Request, call_next):  # type: ignore[
             limit=app.state.telegram_throttle.limit,
             retry_after_seconds=decision.retry_after_seconds,
         )
+        if idempotent_outcome_key is not None:
+            _observe_delivery_policy(
+                path=request.url.path,
+                telegram_user_id=telegram_user_id,
+                method=request.method,
+                status_code=429,
+                outcome="throttled",
+                retry_recommended=True,
+            )
         return JSONResponse(
             status_code=429,
             content={
@@ -148,7 +208,26 @@ async def telegram_command_guards(request: Request, call_next):  # type: ignore[
             },
         )
 
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        if idempotent_outcome_key is not None:
+            _observe_delivery_policy(
+                path=request.url.path,
+                telegram_user_id=telegram_user_id,
+                method=request.method,
+                status_code=500,
+                outcome="failed_transient",
+                retry_recommended=True,
+            )
+            emit_event(
+                "telegram_delivery_error",
+                telegram_user_id=telegram_user_id,
+                path=request.url.path,
+                method=request.method,
+                error_type=exc.__class__.__name__,
+            )
+        raise
 
     if idempotency_key is None or idempotent_outcome_key is None:
         return response
@@ -165,12 +244,17 @@ async def telegram_command_guards(request: Request, call_next):  # type: ignore[
         headers=dict(response.headers),
     )
 
-    if response.status_code == 200:
-        try:
-            payload = loads(body.decode("utf-8"))
-        except Exception:
-            payload = None
-        if isinstance(payload, dict) and payload.get(idempotent_outcome_key) is True:
+    parsed_payload: dict[str, Any] | None = None
+    try:
+        payload = loads(body.decode("utf-8"))
+    except Exception:
+        payload = None
+
+    if isinstance(payload, dict):
+        parsed_payload = payload
+
+    if response.status_code == 200 and parsed_payload is not None:
+        if parsed_payload.get(idempotent_outcome_key) is True:
             app.state.telegram_idempotency.put(
                 idempotency_key,
                 CachedHttpResponse(
@@ -179,6 +263,20 @@ async def telegram_command_guards(request: Request, call_next):  # type: ignore[
                     media_type=media_type,
                 ),
             )
+
+    outcome, retry_recommended = _classify_delivery_outcome(
+        status_code=response.status_code,
+        response_payload=parsed_payload,
+        outcome_key=idempotent_outcome_key,
+    )
+    _observe_delivery_policy(
+        path=request.url.path,
+        telegram_user_id=telegram_user_id,
+        method=request.method,
+        status_code=response.status_code,
+        outcome=outcome,
+        retry_recommended=retry_recommended,
+    )
 
     return replay_safe
 

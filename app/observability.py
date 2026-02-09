@@ -29,6 +29,7 @@ _REQUESTS_TOTAL: dict[tuple[str, str, str], float] = {}
 _REQUEST_LATENCY: dict[tuple[str, str], dict[str, float | list[float]]] = {}
 _BOOKING_OUTCOMES_TOTAL: dict[tuple[str, str], float] = {}
 _ABUSE_OUTCOMES_TOTAL: dict[tuple[str, str], float] = {}
+_TELEGRAM_DELIVERY_OUTCOMES_TOTAL: dict[tuple[str, str], float] = {}
 _SERVICE_HEALTH = 1.0
 
 
@@ -130,6 +131,15 @@ def observe_abuse_outcome(path: str, allowed: bool) -> None:
         _ABUSE_OUTCOMES_TOTAL[key] = _ABUSE_OUTCOMES_TOTAL.get(key, 0.0) + 1.0
 
 
+def observe_telegram_delivery_outcome(path: str, outcome: str) -> None:
+    key = (path, outcome)
+
+    with _METRICS_LOCK:
+        _TELEGRAM_DELIVERY_OUTCOMES_TOTAL[key] = (
+            _TELEGRAM_DELIVERY_OUTCOMES_TOTAL.get(key, 0.0) + 1.0
+        )
+
+
 def render_metrics() -> tuple[bytes, str]:
     lines: list[str] = []
 
@@ -183,6 +193,16 @@ def render_metrics() -> tuple[bytes, str]:
         for (path, outcome), value in sorted(_ABUSE_OUTCOMES_TOTAL.items()):
             lines.append(
                 "bot_api_abuse_outcomes_total"
+                f'{{path="{_escape_label(path)}",outcome="{_escape_label(outcome)}"}} {value:.1f}'
+            )
+
+        lines.append(
+            "# HELP bot_api_telegram_delivery_outcomes_total Outcomes for Telegram write-side delivery processing."
+        )
+        lines.append("# TYPE bot_api_telegram_delivery_outcomes_total counter")
+        for (path, outcome), value in sorted(_TELEGRAM_DELIVERY_OUTCOMES_TOTAL.items()):
+            lines.append(
+                "bot_api_telegram_delivery_outcomes_total"
                 f'{{path="{_escape_label(path)}",outcome="{_escape_label(outcome)}"}} {value:.1f}'
             )
 
