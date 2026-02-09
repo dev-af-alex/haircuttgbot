@@ -19,7 +19,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 2 dev-days
   - Dependencies: T-001
 
-- T-003 — Implement client handler flow mapping to booking contracts — Status: TODO
+- T-003 — Implement client handler flow mapping to booking contracts — Status: DONE
   - Scope: add Telegram handlers for client booking journey using existing internal services/contracts.
   - Acceptance:
     - client can start flow, select master/service/slot, create and cancel booking from Telegram.
@@ -27,7 +27,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 3 dev-days
   - Dependencies: T-002
 
-- T-004 — Implement master handler flow mapping to schedule/cancel contracts — Status: TODO
+- T-004 — Implement master handler flow mapping to schedule/cancel contracts — Status: DONE
   - Scope: add Telegram handlers for master cancellation/day-off/lunch/manual-booking actions.
   - Acceptance:
     - master can perform schedule updates and cancellation with mandatory reason.
@@ -35,7 +35,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 3 dev-days
   - Dependencies: T-002
 
-- T-005 — Add tests and real Telegram validation runbook updates — Status: TODO
+- T-005 — Add tests and real Telegram validation runbook updates — Status: DONE
   - Scope: expand automated tests and local delivery docs to include real Telegram validation steps.
   - Acceptance:
     - tests cover handler-to-service mapping and key rejection paths.
@@ -43,7 +43,7 @@ Sizing target: each task is 1-3 dev-days.
   - Estimation: 2 dev-days
   - Dependencies: T-003, T-004
 
-- T-006 — Final doc-sync and epic closure checks — Status: TODO
+- T-006 — Final doc-sync and epic closure checks — Status: DONE
   - Scope: align epic workspace, roadmap, and delivery/checklist docs for close-out.
   - Acceptance:
     - epic and PR-group statuses reflect delivered scope.

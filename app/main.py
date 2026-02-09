@@ -34,6 +34,7 @@ from app.observability import (
     set_service_health,
 )
 from app.throttling import TelegramCommandThrottle
+from app.telegram import configure_dispatcher
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
@@ -86,6 +87,7 @@ async def lifespan(_: FastAPI):
         bot_token=bot_token,
     )
     dispatcher = Dispatcher()
+    configure_dispatcher(dispatcher)
     bot: Bot | None = None
     polling_task: Task[Any] | None = None
 

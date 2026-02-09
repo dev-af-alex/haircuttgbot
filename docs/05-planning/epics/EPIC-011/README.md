@@ -1,6 +1,6 @@
 # EPIC-011 — Real Telegram runtime integration (aiogram updates path)
 
-Status: IN_PROGRESS
+Status: DONE
 
 ## Goal
 
@@ -44,7 +44,8 @@ Connect aiogram update handling to existing booking/schedule services so the sys
 
 - Group 01: ingress mode decision + aiogram runtime bootstrap (safe, mergeable).
 - Group 02: client/master handler flows wired to existing services with tests.
-- Group 03: runbook hardening, end-to-end real Telegram validation notes, closure sync.
+- Group 03: runbook hardening, end-to-end real Telegram validation notes.
+- Group 04: final closure checks and merge-gate sync.
 
 ## Notes
 
@@ -59,3 +60,32 @@ Connect aiogram update handling to existing booking/schedule services so the sys
   - emits explicit runtime events and does not crash when token is missing or mode is disabled.
 - Added runtime policy unit tests and synchronized local/deploy documentation with new env/runtime behavior.
 - Marked `T-001`, `T-002`, and `group-01` as `DONE`.
+
+## Delivered (Group 02)
+
+- Added aiogram command handlers for Telegram chat interaction and wired them into dispatcher bootstrap.
+- Implemented client command mapping to booking-flow contracts:
+  - `/client_start`, `/client_master`, `/client_slots`, `/client_book`, `/client_cancel`.
+- Implemented master command mapping to schedule/cancel contracts:
+  - `/master_cancel`, `/master_dayoff`, `/master_lunch`, `/master_manual`.
+- Added role-gated command service layer and tests for client/master flow mapping and rejection behavior.
+- Marked `T-003`, `T-004`, and `group-02` as `DONE`.
+
+## Delivered (Group 03)
+
+- Added reproducible real Telegram validation runbook section in `docs/04-delivery/local-dev.md` for polling mode.
+- Confirmed test coverage includes command mapping and key rejection paths.
+- Marked `T-005` and `group-03` as `DONE`.
+
+## Delivered (Group 04)
+
+- Completed final task/doc synchronization for EPIC-011 closure readiness.
+- Documented merge-gate readiness and explicit deviation:
+  - local compose/smoke/tests/Bandit passed;
+  - `pip-audit` could not run in this execution environment due DNS/network restrictions to `pypi.org`.
+- Marked `T-006` and `group-04` as `DONE`.
+
+## Epic closure note
+
+- Delivered: real Telegram polling runtime is wired with aiogram handlers for client/master command flows, and local validation runbook now includes reproducible real Telegram checks.
+- Merge-gate status: local compose/smoke, tests, and Bandit passed; dependency audit (`pip-audit`) is an intentional environment deviation in this workspace and remains enforced in CI.

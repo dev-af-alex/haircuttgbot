@@ -22,6 +22,23 @@ Runtime ingress note:
 
 - Real Telegram updates ingress uses aiogram polling mode in current baseline (`TELEGRAM_UPDATES_MODE=polling`).
 - Webhook ingress mode is not enabled in this baseline.
+- Telegram chat command handlers are registered in aiogram dispatcher and map to existing booking/schedule services.
+
+Telegram command contract baseline:
+
+- Shared:
+  - `/start`, `/help`: show role-aware help and supported commands.
+- Client commands:
+  - `/client_start`
+  - `/client_master <master_id>`
+  - `/client_slots <master_id> <YYYY-MM-DD>`
+  - `/client_book <master_id> <service_type> <YYYY-MM-DDTHH:MM:SS+00:00>`
+  - `/client_cancel <booking_id>`
+- Master commands:
+  - `/master_cancel <booking_id> <reason>`
+  - `/master_dayoff <YYYY-MM-DDTHH:MM:SS+00:00> <YYYY-MM-DDTHH:MM:SS+00:00> [block_id]`
+  - `/master_lunch <HH:MM:SS> <HH:MM:SS>`
+  - `/master_manual <service_type> <YYYY-MM-DDTHH:MM:SS+00:00> <client_name>`
 
 ## 4) Implemented endpoints
 

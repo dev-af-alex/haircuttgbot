@@ -308,6 +308,34 @@ PY`
 8. Rehearse PostgreSQL backup/restore once per release candidate (or when schema changes):
    follow `docs/04-delivery/postgresql-backup-restore.md`
 
+## Optional real Telegram validation (polling mode)
+
+Use this sequence when validating aiogram runtime against a real Telegram chat.
+
+1. Configure `.env`:
+   - `TELEGRAM_BOT_TOKEN=<your_bot_token>`
+   - `TELEGRAM_UPDATES_MODE=polling`
+2. Start stack and seed baseline:
+   - `docker compose up -d --build`
+   - `docker compose exec -T bot-api python -m app.db.seed`
+3. Ensure polling runtime is active:
+   - `docker compose logs bot-api --tail=200 | grep 'telegram_updates_runtime_started'`
+4. Map your Telegram user id to `Client` role (replace `YOUR_TG_ID`):
+   - `docker compose exec -T postgres psql -U haircuttgbot -d haircuttgbot -c "INSERT INTO roles (name) VALUES ('Client') ON CONFLICT (name) DO NOTHING; INSERT INTO users (telegram_user_id, role_id) VALUES (YOUR_TG_ID, (SELECT id FROM roles WHERE name='Client')) ON CONFLICT (telegram_user_id) DO UPDATE SET role_id = EXCLUDED.role_id;"`
+5. In Telegram chat with bot run:
+   - `/start`
+   - `/client_start`
+   - `/client_master 1`
+   - `/client_slots 1 2026-02-20`
+   - `/client_book 1 haircut 2026-02-20T10:00:00+00:00`
+6. Validate key rejection path in chat:
+   - repeat previous booking command and confirm bot returns slot/booking rejection.
+7. Optional master-role validation requires a second Telegram account:
+   - map second account to `Master` role and link to `masters.user_id` record;
+   - validate `/master_dayoff`, `/master_lunch`, `/master_manual`, `/master_cancel`.
+8. Stop stack:
+   - `docker compose down`
+
 ## Notes
 
 - Runtime skeleton includes automatic migration execution via `migrate` service.
