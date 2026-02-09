@@ -27,7 +27,7 @@ Read only:
 Do:
 
 1) Create/update `docs/05-planning/epics.md`:
-    - 5–15 epics, ordered by dependency/value
+    - epics, ordered by dependency/value
     - must include: (a) compose runnable skeleton + CI security gates, (b) VM deploy baseline
     - each epic has goal + acceptance + dependencies + local-run impact
 2) If planning is blocked by unknowns, add them to `docs/01-product/open-questions.md` and stop.
