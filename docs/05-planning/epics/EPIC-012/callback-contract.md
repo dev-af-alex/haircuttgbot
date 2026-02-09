@@ -1,23 +1,25 @@
-# EPIC-012 callback contract and UX map (group-01)
+# EPIC-012 callback contract and UX map
 
-Status: Accepted for group-01 foundation
+Status: Accepted (group-01/group-02/group-03)
 Version: `hb1`
 
-## UX map (button-first foundation)
+## UX map (button-first)
 
 `Client`:
-- Root menu -> `Клиент` -> client menu scaffold
-- Client menu scaffold -> `Назад` -> root menu
+- Root menu -> `Клиент` -> client menu
+- Client menu -> `Новая запись` -> master -> service -> date -> slot -> confirm
+- Client menu -> `Отменить запись` -> booking -> confirm cancel
 
 `Master`:
-- Root menu -> `Мастер` -> master menu scaffold
-- Master menu scaffold -> `Назад` -> root menu
+- Root menu -> `Мастер` -> master menu
+- Master menu -> `Просмотр расписания`
+- Master menu -> `Выходной день` -> date -> apply
+- Master menu -> `Обед` -> preset -> apply
+- Master menu -> `Ручная запись` -> service -> date -> slot -> confirm
+- Master menu -> `Отмена записи` -> booking -> reason -> confirm
 
 Shared:
-- Root/menu scaffold -> `Обновить`/`Главное меню` -> root menu refresh
-
-Note:
-- Business actions (booking/schedule writes) are intentionally out of group-01 and stay command-driven.
+- `Главное меню` -> root menu refresh
 
 ## Callback payload schema
 
@@ -35,6 +37,7 @@ Actions (group-01):
 - `cm` -> open client menu scaffold (requires RBAC `client:book`)
 - `mm` -> open master menu scaffold (requires RBAC `master:schedule`)
 - `bk` -> back to root menu
+- `mr` -> back to master menu
 
 Actions (group-02, client flow):
 - `cb` -> start booking flow, show master list
@@ -46,6 +49,22 @@ Actions (group-02, client flow):
 - `cc` -> show cancellable active bookings
 - `cci|<booking_id>` -> open cancellation confirmation
 - `ccn|<booking_id>` -> confirm cancellation
+
+Actions (group-03, master flow):
+- `msv` -> show master schedule snapshot
+- `msd` -> open day-off date selection
+- `msu|<YYYYMMDD>` -> apply day-off for selected date (full work window)
+- `mlm` -> open lunch preset selection
+- `mls|<preset_code>` -> apply lunch preset
+- `msb` -> start manual booking flow
+- `mbs|<service_code>` -> select manual booking service
+- `mbd|<YYYYMMDD>` -> select manual booking date
+- `mbl|<YYYYMMDDHHMM>` -> select manual booking slot
+- `mbc` -> confirm manual booking
+- `msc` -> open master cancellation booking list
+- `mci|<booking_id>` -> select booking for cancellation
+- `mcr|<reason_code>` -> select cancellation reason
+- `mcn` -> confirm cancellation with selected reason
 
 Backward compatibility strategy:
 - Existing slash-command handlers remain available during EPIC-012 rollout.
@@ -59,6 +78,7 @@ Backward compatibility strategy:
   - `Кнопка устарела. Откройте актуальное меню через /start.`
 - Stale events are logged as `telegram_callback_stale`.
 - Client flow context (`master_id`, `service_type`, `slot_token`) is required on dependent steps; missing context is treated as stale interaction.
+- Master flow context (manual booking / cancellation reason) is required on dependent steps; missing context is treated as stale interaction.
 
 ## Invalid action rules
 

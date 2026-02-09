@@ -30,7 +30,7 @@ Legend:
   - Dependencies: T-002
   - PR group: group-02
 
-- T-004 (L) - Implement Master interactive schedule/cancel flows - Status: TODO
+- T-004 (L) - Implement Master interactive schedule/cancel flows - Status: DONE
   - Output: button-first master flow for schedule view, day-off, lunch update, manual booking, cancellation with reason.
   - Acceptance checks:
     - Master paths are RBAC-scoped to own profile and preserve business validations.
@@ -38,7 +38,7 @@ Legend:
   - Dependencies: T-002
   - PR group: group-03
 
-- T-005 (S) - Update tests and smoke coverage for button scenarios - Status: TODO
+- T-005 (S) - Update tests and smoke coverage for button scenarios - Status: DONE
   - Output: unit/integration tests for callback handlers and deterministic stale-action responses.
   - Acceptance checks:
     - CI test path remains green with added callback-flow coverage.
@@ -46,7 +46,7 @@ Legend:
   - Dependencies: T-003, T-004
   - PR group: group-03
 
-- T-006 (S) - Synchronize local/VM docs for interactive validation - Status: TODO
+- T-006 (S) - Synchronize local/VM docs for interactive validation - Status: DONE
   - Output: updated runbook notes for real Telegram button checks in local and VM docs.
   - Acceptance checks:
     - `docs/04-delivery/local-dev.md` includes button-first real Telegram validation steps.

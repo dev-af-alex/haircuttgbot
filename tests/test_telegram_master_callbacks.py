@@ -1,0 +1,202 @@
+from __future__ import annotations
+
+import sqlite3
+from datetime import UTC, datetime
+
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
+
+from app.telegram.callbacks import TelegramCallbackRouter
+
+sqlite3.register_adapter(datetime, lambda value: value.isoformat())
+
+
+def _setup_flow_schema() -> Engine:
+    engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+
+    with engine.begin() as conn:
+        conn.execute(text("CREATE TABLE roles (id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL)"))
+        conn.execute(
+            text(
+                """
+                CREATE TABLE users (
+                    id INTEGER PRIMARY KEY,
+                    telegram_user_id BIGINT UNIQUE NOT NULL,
+                    role_id INTEGER NOT NULL
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE masters (
+                    id INTEGER PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    display_name TEXT NOT NULL,
+                    is_active BOOLEAN NOT NULL,
+                    work_start TEXT NOT NULL,
+                    work_end TEXT NOT NULL,
+                    lunch_start TEXT NOT NULL,
+                    lunch_end TEXT NOT NULL
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE bookings (
+                    id INTEGER PRIMARY KEY,
+                    master_id INTEGER NOT NULL,
+                    client_user_id INTEGER,
+                    service_type TEXT,
+                    status TEXT NOT NULL,
+                    cancellation_reason TEXT,
+                    slot_start DATETIME NOT NULL,
+                    slot_end DATETIME NOT NULL
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE availability_blocks (
+                    id INTEGER PRIMARY KEY,
+                    master_id INTEGER NOT NULL,
+                    block_type TEXT,
+                    start_at DATETIME NOT NULL,
+                    end_at DATETIME NOT NULL,
+                    reason TEXT
+                )
+                """
+            )
+        )
+        conn.execute(text("INSERT INTO roles (id, name) VALUES (1, 'Client'), (2, 'Master')"))
+        conn.execute(
+            text(
+                """
+                INSERT INTO users (id, telegram_user_id, role_id)
+                VALUES
+                    (10, 1000001, 2),
+                    (20, 2000001, 1)
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                INSERT INTO masters (id, user_id, display_name, is_active, work_start, work_end, lunch_start, lunch_end)
+                VALUES
+                    (1, 10, 'Master Demo 1', 1, '10:00:00', '21:00:00', '13:00:00', '14:00:00')
+                """
+            )
+        )
+
+    return engine
+
+
+def _callbacks_for_action(markup, action: str) -> list[str]:
+    callbacks: list[str] = []
+    for row in markup.inline_keyboard:
+        for button in row:
+            callback_data = button.callback_data
+            if isinstance(callback_data, str) and callback_data.startswith(f"hb1|{action}"):
+                callbacks.append(callback_data)
+    return callbacks
+
+
+def _create_client_booking(engine: Engine, *, slot_start: datetime) -> int:
+    with engine.begin() as conn:
+        booking_id = conn.execute(
+            text(
+                """
+                INSERT INTO bookings (master_id, client_user_id, service_type, slot_start, slot_end, status)
+                VALUES (1, 20, 'haircut', :slot_start, :slot_end, 'active')
+                RETURNING id
+                """
+            ),
+            {
+                "slot_start": slot_start,
+                "slot_end": slot_start.replace(hour=slot_start.hour + 1),
+            },
+        ).scalar_one()
+    return int(booking_id)
+
+
+def test_master_interactive_schedule_dayoff_lunch_manual_flow() -> None:
+    engine = _setup_flow_schema()
+    router = TelegramCallbackRouter(engine)
+    router.seed_root_menu(telegram_user_id=1000001)
+
+    result = router.handle(telegram_user_id=1000001, data="hb1|mm")
+    assert "Меню мастера" in result.text
+
+    result = router.handle(telegram_user_id=1000001, data="hb1|msv")
+    assert "Ближайшее расписание мастера" in result.text
+
+    result = router.handle(telegram_user_id=1000001, data="hb1|msd")
+    day_off_callbacks = _callbacks_for_action(result.reply_markup, "msu")
+    assert day_off_callbacks
+
+    result = router.handle(telegram_user_id=1000001, data=day_off_callbacks[0])
+    assert "Выходной интервал" in result.text
+
+    result = router.handle(telegram_user_id=1000001, data="hb1|mlm")
+    lunch_callbacks = _callbacks_for_action(result.reply_markup, "mls")
+    assert lunch_callbacks
+
+    result = router.handle(telegram_user_id=1000001, data=lunch_callbacks[-1])
+    assert "Обеденный перерыв обновлен" in result.text
+
+    result = router.handle(telegram_user_id=1000001, data="hb1|msb")
+    service_callbacks = _callbacks_for_action(result.reply_markup, "mbs")
+    assert service_callbacks
+
+    result = router.handle(telegram_user_id=1000001, data=service_callbacks[0])
+    date_callbacks = _callbacks_for_action(result.reply_markup, "mbd")
+    assert len(date_callbacks) >= 2
+
+    result = router.handle(telegram_user_id=1000001, data=date_callbacks[1])
+    slot_callbacks = _callbacks_for_action(result.reply_markup, "mbl")
+    assert slot_callbacks
+
+    result = router.handle(telegram_user_id=1000001, data=slot_callbacks[0])
+    assert "Подтвердите ручную запись" in result.text
+
+    result = router.handle(telegram_user_id=1000001, data="hb1|mbc")
+    assert "Ручная запись создана" in result.text
+
+
+def test_master_interactive_cancel_requires_reason_and_sends_notifications() -> None:
+    engine = _setup_flow_schema()
+    router = TelegramCallbackRouter(engine)
+    router.seed_root_menu(telegram_user_id=1000001)
+
+    _create_client_booking(
+        engine,
+        slot_start=datetime(2026, 2, 20, 10, 0, tzinfo=UTC),
+    )
+
+    result = router.handle(telegram_user_id=1000001, data="hb1|mm")
+    assert "Меню мастера" in result.text
+
+    result = router.handle(telegram_user_id=1000001, data="hb1|msc")
+    cancel_pick_callbacks = _callbacks_for_action(result.reply_markup, "mci")
+    assert cancel_pick_callbacks
+
+    result = router.handle(telegram_user_id=1000001, data=cancel_pick_callbacks[0])
+    reason_callbacks = _callbacks_for_action(result.reply_markup, "mcr")
+    assert reason_callbacks
+
+    # confirm without choosing reason is stale
+    stale = router.handle(telegram_user_id=1000001, data="hb1|mcn")
+    assert "устарела" in stale.text
+
+    result = router.handle(telegram_user_id=1000001, data=reason_callbacks[0])
+    assert "Подтвердите отмену" in result.text
+
+    result = router.handle(telegram_user_id=1000001, data="hb1|mcn")
+    assert "успешно отменена" in result.text
+    assert len(result.notifications) == 2

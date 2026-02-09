@@ -101,6 +101,7 @@ The bundle must not include real secret values.
   - `/health` and `/metrics` availability
   - client booking success + one-active-booking rejection path
   - master schedule update path (day-off/lunch/manual booking)
+  - real Telegram button-first validation for both roles (`Client` and `Master`) in polling mode when token is configured
 - Rollback section must define clear failure triggers and deterministic command path.
 
 ## Deployment runbook (clean VM -> running stack)
@@ -189,6 +190,9 @@ docker compose --env-file /opt/haircuttgbot/shared/.env logs bot-api --tail=50 |
 ```
 
 Then run the canonical smoke path from `docs/04-delivery/local-dev.md` against VM services (seed + booking/cancellation/schedule scenario).
+When Telegram token is configured, additionally validate button-first chat flows:
+- `Client`: new booking + cancel booking via buttons.
+- `Master`: schedule view + day-off + lunch update + manual booking + cancellation with reason via buttons.
 
 ### 6. Persist on reboot (systemd)
 
