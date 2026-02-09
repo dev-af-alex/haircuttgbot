@@ -27,7 +27,8 @@ Do:
 2) Create epic workspace:
     - `docs/05-planning/epics/<EPIC-ID>/README.md`
     - `docs/05-planning/epics/<EPIC-ID>/tasks.md` (each 1–3 dev-days)
-    - `docs/05-planning/epics/<EPIC-ID>/pr-groups/group-01.md`
+    - `docs/05-planning/epics/<EPIC-ID>/pr-groups/group-XX.md` for all planned PR groups
+      (number groups sequentially with zero padding: `group-01.md`, `group-02.md`, `group-03.md`, ...)
 3) Group tasks so each PR group:
     - is mergeable via merge-commit
     - keeps docker-compose local run working
