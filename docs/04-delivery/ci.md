@@ -13,6 +13,7 @@ Merge strategy: merge-commit.
 ## Implemented baseline
 
 - Workflow file: `.github/workflows/ci.yml`
+- Dependency update automation: `.github/dependabot.yml` (weekly `pip` + GitHub Actions updates)
 - Trigger: every `pull_request` and push to `master`
 - Python version: `3.12`
 - Postgres service for migration checks in CI

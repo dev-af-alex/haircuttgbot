@@ -4,112 +4,12 @@ import asyncio
 import json
 from typing import Any
 
+from starlette.requests import Request
+
 from app.idempotency import TelegramIdempotencyStore
-from app.main import app
-
-
-def _asgi_request(
-    method: str,
-    path: str,
-    payload: dict[str, Any] | None = None,
-) -> tuple[int, dict[str, str], bytes]:
-    response_messages: list[dict[str, Any]] = []
-    request_body = json.dumps(payload or {}).encode("utf-8")
-    request_sent = False
-
-    scope = {
-        "type": "http",
-        "asgi": {"version": "3.0"},
-        "http_version": "1.1",
-        "method": method.upper(),
-        "scheme": "http",
-        "path": path,
-        "raw_path": path.encode("utf-8"),
-        "query_string": b"",
-        "headers": [
-            (b"host", b"testserver"),
-            (b"content-type", b"application/json"),
-            (b"content-length", str(len(request_body)).encode("utf-8")),
-        ],
-        "client": ("testclient", 123),
-        "server": ("testserver", 80),
-    }
-
-    async def receive() -> dict[str, Any]:
-        nonlocal request_sent
-        if request_sent:
-            return {"type": "http.disconnect"}
-        request_sent = True
-        return {"type": "http.request", "body": request_body, "more_body": False}
-
-    async def send(message: dict[str, Any]) -> None:
-        response_messages.append(message)
-
-    asyncio.run(app(scope, receive, send))
-
-    start = next(message for message in response_messages if message["type"] == "http.response.start")
-    status_code = int(start["status"])
-    headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in start["headers"]}
-    body = b"".join(
-        message.get("body", b"")
-        for message in response_messages
-        if message["type"] == "http.response.body"
-    )
-    return status_code, headers, body
-
-
-class _DummyConfirmFlowService:
-    calls = 0
-
-    def __init__(self, _engine) -> None:
-        pass
-
-    def confirm(
-        self,
-        *,
-        client_telegram_user_id: int,
-        master_id: int,
-        service_type: str,
-        slot_start,
-    ) -> dict[str, object]:
-        _ = client_telegram_user_id
-        _ = master_id
-        _ = service_type
-        _ = slot_start
-        self.__class__.calls += 1
-        return {
-            "created": True,
-            "booking_id": 5000 + self.__class__.calls,
-            "message": "ok",
-            "notifications": [],
-        }
-
-
-class _DummyRejectFlowService:
-    calls = 0
-
-    def __init__(self, _engine) -> None:
-        pass
-
-    def confirm(
-        self,
-        *,
-        client_telegram_user_id: int,
-        master_id: int,
-        service_type: str,
-        slot_start,
-    ) -> dict[str, object]:
-        _ = client_telegram_user_id
-        _ = master_id
-        _ = service_type
-        _ = slot_start
-        self.__class__.calls += 1
-        return {
-            "created": False,
-            "booking_id": None,
-            "message": "slot is not available",
-            "notifications": [],
-        }
+from app.main import app, telegram_command_guards
+from app.observability import render_metrics
+from app.throttling import TelegramCommandThrottle
 
 
 def _metric_value(exposition: str, metric_name: str, labels: dict[str, str], default: float = 0.0) -> float:
@@ -121,32 +21,55 @@ def _metric_value(exposition: str, metric_name: str, labels: dict[str, str], def
     return default
 
 
-def test_telegram_idempotency_replays_successful_write(monkeypatch) -> None:
-    monkeypatch.setattr("app.main.TelegramBookingFlowService", _DummyConfirmFlowService)
-    _DummyConfirmFlowService.calls = 0
+def _build_request(path: str, payload: dict[str, Any]) -> Request:
+    body = json.dumps(payload).encode("utf-8")
+    delivered = False
 
+    async def receive() -> dict[str, Any]:
+        nonlocal delivered
+        if delivered:
+            return {"type": "http.request", "body": b"", "more_body": False}
+        delivered = True
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    scope = {
+        "type": "http",
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": path,
+        "raw_path": path.encode("utf-8"),
+        "query_string": b"",
+        "headers": [
+            (b"host", b"testserver"),
+            (b"content-type", b"application/json"),
+            (b"content-length", str(len(body)).encode("utf-8")),
+        ],
+        "client": ("testclient", 123),
+        "server": ("testserver", 80),
+        "root_path": "",
+        "asgi": {"version": "3.0", "spec_version": "2.3"},
+    }
+    return Request(scope, receive)
+
+
+def test_telegram_idempotency_replays_successful_write() -> None:
     original_store = app.state.telegram_idempotency
+    original_throttle = app.state.telegram_throttle
     app.state.telegram_idempotency = TelegramIdempotencyStore(window_seconds=120)
+    app.state.telegram_throttle = TelegramCommandThrottle(limit=100, window_seconds=60)
 
     try:
-        before_status, _, before_metrics_body = _asgi_request("GET", "/metrics")
-        assert before_status == 200
-        before_metrics = before_metrics_body.decode("utf-8")
+        before_metrics = render_metrics()[0].decode("utf-8")
         before_processed = _metric_value(
             before_metrics,
             "bot_api_telegram_delivery_outcomes_total",
-            {
-                "path": "/internal/telegram/client/booking-flow/confirm",
-                "outcome": "processed_success",
-            },
+            {"path": "/internal/telegram/client/booking-flow/confirm", "outcome": "processed_success"},
         )
         before_replayed = _metric_value(
             before_metrics,
             "bot_api_telegram_delivery_outcomes_total",
-            {
-                "path": "/internal/telegram/client/booking-flow/confirm",
-                "outcome": "replayed",
-            },
+            {"path": "/internal/telegram/client/booking-flow/confirm", "outcome": "replayed"},
         )
 
         payload = {
@@ -155,72 +78,83 @@ def test_telegram_idempotency_replays_successful_write(monkeypatch) -> None:
             "service_type": "haircut",
             "slot_start": "2026-02-13T10:00:00+00:00",
         }
+        calls = {"count": 0}
 
-        first_status, first_headers, first_body = _asgi_request(
-            "POST",
-            "/internal/telegram/client/booking-flow/confirm",
-            payload,
+        class _DummyResponse:
+            def __init__(self, response_payload: dict[str, Any]) -> None:
+                self.status_code = 200
+                self.media_type = "application/json"
+                self.headers: dict[str, str] = {}
+
+                async def _iterate():
+                    yield json.dumps(response_payload).encode("utf-8")
+
+                self.body_iterator = _iterate()
+
+        async def call_next(_request: Request):
+            calls["count"] += 1
+            payload = {
+                "created": True,
+                "booking_id": 5000 + calls["count"],
+                "message": "ok",
+                "notifications": [],
+            }
+            return _DummyResponse(payload)
+
+        first = asyncio.run(
+            telegram_command_guards(
+                _build_request("/internal/telegram/client/booking-flow/confirm", payload),
+                call_next,
+            )
         )
-        second_status, second_headers, second_body = _asgi_request(
-            "POST",
-            "/internal/telegram/client/booking-flow/confirm",
-            payload,
+        second = asyncio.run(
+            telegram_command_guards(
+                _build_request("/internal/telegram/client/booking-flow/confirm", payload),
+                call_next,
+            )
         )
-        after_status, _, after_metrics_body = _asgi_request("GET", "/metrics")
-        assert after_status == 200
     finally:
         app.state.telegram_idempotency = original_store
+        app.state.telegram_throttle = original_throttle
 
-    first_json = json.loads(first_body.decode("utf-8"))
-    second_json = json.loads(second_body.decode("utf-8"))
-    after_metrics = after_metrics_body.decode("utf-8")
+    first_body = json.loads(first.body.decode("utf-8"))
+    second_body = json.loads(second.body.decode("utf-8"))
+    after_metrics = render_metrics()[0].decode("utf-8")
     after_processed = _metric_value(
         after_metrics,
         "bot_api_telegram_delivery_outcomes_total",
-        {
-            "path": "/internal/telegram/client/booking-flow/confirm",
-            "outcome": "processed_success",
-        },
+        {"path": "/internal/telegram/client/booking-flow/confirm", "outcome": "processed_success"},
     )
     after_replayed = _metric_value(
         after_metrics,
         "bot_api_telegram_delivery_outcomes_total",
-        {
-            "path": "/internal/telegram/client/booking-flow/confirm",
-            "outcome": "replayed",
-        },
+        {"path": "/internal/telegram/client/booking-flow/confirm", "outcome": "replayed"},
     )
 
-    assert first_status == 200
-    assert second_status == 200
-    assert first_headers.get("x-idempotency-replayed") is None
-    assert second_headers.get("x-idempotency-replayed") == "1"
-    assert first_json["created"] is True
-    assert second_json["created"] is True
-    assert first_json["booking_id"] == second_json["booking_id"]
-    assert _DummyConfirmFlowService.calls == 1
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.headers.get("X-Idempotency-Replayed") is None
+    assert second.headers.get("X-Idempotency-Replayed") == "1"
+    assert first_body["created"] is True
+    assert second_body["created"] is True
+    assert first_body["booking_id"] == second_body["booking_id"]
+    assert calls["count"] == 1
     assert after_processed >= before_processed + 1.0
     assert after_replayed >= before_replayed + 1.0
 
 
-def test_telegram_idempotency_does_not_cache_rejected_write(monkeypatch) -> None:
-    monkeypatch.setattr("app.main.TelegramBookingFlowService", _DummyRejectFlowService)
-    _DummyRejectFlowService.calls = 0
-
+def test_telegram_idempotency_does_not_cache_rejected_write() -> None:
     original_store = app.state.telegram_idempotency
+    original_throttle = app.state.telegram_throttle
     app.state.telegram_idempotency = TelegramIdempotencyStore(window_seconds=120)
+    app.state.telegram_throttle = TelegramCommandThrottle(limit=100, window_seconds=60)
 
     try:
-        before_status, _, before_metrics_body = _asgi_request("GET", "/metrics")
-        assert before_status == 200
-        before_metrics = before_metrics_body.decode("utf-8")
+        before_metrics = render_metrics()[0].decode("utf-8")
         before_rejected = _metric_value(
             before_metrics,
             "bot_api_telegram_delivery_outcomes_total",
-            {
-                "path": "/internal/telegram/client/booking-flow/confirm",
-                "outcome": "processed_rejected",
-            },
+            {"path": "/internal/telegram/client/booking-flow/confirm", "outcome": "processed_rejected"},
         )
 
         payload = {
@@ -229,38 +163,59 @@ def test_telegram_idempotency_does_not_cache_rejected_write(monkeypatch) -> None
             "service_type": "haircut",
             "slot_start": "2026-02-13T11:00:00+00:00",
         }
-        first_status, first_headers, first_body = _asgi_request(
-            "POST",
-            "/internal/telegram/client/booking-flow/confirm",
-            payload,
+        calls = {"count": 0}
+
+        class _DummyResponse:
+            def __init__(self, response_payload: dict[str, Any]) -> None:
+                self.status_code = 200
+                self.media_type = "application/json"
+                self.headers: dict[str, str] = {}
+
+                async def _iterate():
+                    yield json.dumps(response_payload).encode("utf-8")
+
+                self.body_iterator = _iterate()
+
+        async def call_next(_request: Request):
+            calls["count"] += 1
+            payload = {
+                "created": False,
+                "booking_id": None,
+                "message": "slot is not available",
+                "notifications": [],
+            }
+            return _DummyResponse(payload)
+
+        first = asyncio.run(
+            telegram_command_guards(
+                _build_request("/internal/telegram/client/booking-flow/confirm", payload),
+                call_next,
+            )
         )
-        second_status, second_headers, second_body = _asgi_request(
-            "POST",
-            "/internal/telegram/client/booking-flow/confirm",
-            payload,
+        second = asyncio.run(
+            telegram_command_guards(
+                _build_request("/internal/telegram/client/booking-flow/confirm", payload),
+                call_next,
+            )
         )
-        after_status, _, after_metrics_body = _asgi_request("GET", "/metrics")
-        assert after_status == 200
     finally:
         app.state.telegram_idempotency = original_store
+        app.state.telegram_throttle = original_throttle
 
-    first_json = json.loads(first_body.decode("utf-8"))
-    second_json = json.loads(second_body.decode("utf-8"))
-    after_metrics = after_metrics_body.decode("utf-8")
+    first_body = json.loads(first.body.decode("utf-8"))
+    second_body = json.loads(second.body.decode("utf-8"))
+    after_metrics = render_metrics()[0].decode("utf-8")
     after_rejected = _metric_value(
         after_metrics,
         "bot_api_telegram_delivery_outcomes_total",
-        {
-            "path": "/internal/telegram/client/booking-flow/confirm",
-            "outcome": "processed_rejected",
-        },
+        {"path": "/internal/telegram/client/booking-flow/confirm", "outcome": "processed_rejected"},
     )
 
-    assert first_status == 200
-    assert second_status == 200
-    assert first_headers.get("x-idempotency-replayed") is None
-    assert second_headers.get("x-idempotency-replayed") is None
-    assert first_json["created"] is False
-    assert second_json["created"] is False
-    assert _DummyRejectFlowService.calls == 2
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.headers.get("X-Idempotency-Replayed") is None
+    assert second.headers.get("X-Idempotency-Replayed") is None
+    assert first_body["created"] is False
+    assert second_body["created"] is False
+    assert calls["count"] == 2
     assert after_rejected >= before_rejected + 2.0

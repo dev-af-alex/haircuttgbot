@@ -5,7 +5,10 @@ import json
 import logging
 from typing import Any
 
-from app.main import app
+from starlette.requests import Request
+
+from app.main import app, telegram_command_guards
+from app.observability import render_metrics
 from app.throttling import TelegramCommandThrottle
 
 
@@ -18,29 +21,21 @@ def _metric_value(exposition: str, metric_name: str, labels: dict[str, str]) -> 
     return 0.0
 
 
-class _DummyTelegramFlowService:
-    def __init__(self, _engine) -> None:
-        pass
+def _build_request(path: str, payload: dict[str, Any]) -> Request:
+    body = json.dumps(payload).encode("utf-8")
+    delivered = False
 
-    def cancel(self, *, client_telegram_user_id: int, booking_id: int) -> dict[str, object]:
-        return {
-            "cancelled": True,
-            "booking_id": booking_id,
-            "message": "ok",
-            "notifications": [{"recipient_telegram_user_id": client_telegram_user_id, "message": "ok"}],
-        }
-
-
-def _asgi_request(method: str, path: str, payload: dict[str, Any] | None = None) -> tuple[int, bytes]:
-    response_messages: list[dict[str, Any]] = []
-    request_body = json.dumps(payload or {}).encode("utf-8")
-    request_sent = False
+    async def receive() -> dict[str, Any]:
+        nonlocal delivered
+        if delivered:
+            return {"type": "http.request", "body": b"", "more_body": False}
+        delivered = True
+        return {"type": "http.request", "body": body, "more_body": False}
 
     scope = {
         "type": "http",
-        "asgi": {"version": "3.0"},
         "http_version": "1.1",
-        "method": method.upper(),
+        "method": "POST",
         "scheme": "http",
         "path": path,
         "raw_path": path.encode("utf-8"),
@@ -48,66 +43,81 @@ def _asgi_request(method: str, path: str, payload: dict[str, Any] | None = None)
         "headers": [
             (b"host", b"testserver"),
             (b"content-type", b"application/json"),
-            (b"content-length", str(len(request_body)).encode("utf-8")),
+            (b"content-length", str(len(body)).encode("utf-8")),
         ],
         "client": ("testclient", 123),
         "server": ("testserver", 80),
+        "root_path": "",
+        "asgi": {"version": "3.0", "spec_version": "2.3"},
     }
-
-    async def receive() -> dict[str, Any]:
-        nonlocal request_sent
-        if request_sent:
-            return {"type": "http.disconnect"}
-        request_sent = True
-        return {"type": "http.request", "body": request_body, "more_body": False}
-
-    async def send(message: dict[str, Any]) -> None:
-        response_messages.append(message)
-
-    asyncio.run(app(scope, receive, send))
-
-    status_code = next(message["status"] for message in response_messages if message["type"] == "http.response.start")
-    body = b"".join(
-        message.get("body", b"")
-        for message in response_messages
-        if message["type"] == "http.response.body"
-    )
-    return status_code, body
+    return Request(scope, receive)
 
 
-def test_telegram_abuse_throttle_denies_burst_requests(monkeypatch, caplog) -> None:
-    monkeypatch.setattr("app.main.TelegramBookingFlowService", _DummyTelegramFlowService)
+def test_telegram_abuse_throttle_denies_burst_requests(caplog) -> None:
     original_throttle = app.state.telegram_throttle
     app.state.telegram_throttle = TelegramCommandThrottle(limit=2, window_seconds=60)
     caplog.set_level(logging.INFO, logger="bot_api")
 
+    class _DummyResponse:
+        def __init__(self, response_payload: dict[str, Any]) -> None:
+            self.status_code = 200
+            self.media_type = "application/json"
+            self.headers: dict[str, str] = {}
+
+            async def _iterate():
+                yield json.dumps(response_payload).encode("utf-8")
+
+            self.body_iterator = _iterate()
+
+    calls = {"count": 0}
+
+    async def call_next(_request: Request):
+        calls["count"] += 1
+        payload = {
+            "cancelled": True,
+            "booking_id": 40 + calls["count"],
+            "message": "ok",
+            "notifications": [{"recipient_telegram_user_id": 2000001, "message": "ok"}],
+        }
+        return _DummyResponse(payload)
+
     try:
-        first_status, _ = _asgi_request(
-            "POST",
-            "/internal/telegram/client/booking-flow/cancel",
-            {"client_telegram_user_id": 2000001, "booking_id": 42},
+        first = asyncio.run(
+            telegram_command_guards(
+                _build_request(
+                    "/internal/telegram/client/booking-flow/cancel",
+                    {"client_telegram_user_id": 2000001, "booking_id": 42},
+                ),
+                call_next,
+            )
         )
-        second_status, _ = _asgi_request(
-            "POST",
-            "/internal/telegram/client/booking-flow/cancel",
-            {"client_telegram_user_id": 2000001, "booking_id": 43},
+        second = asyncio.run(
+            telegram_command_guards(
+                _build_request(
+                    "/internal/telegram/client/booking-flow/cancel",
+                    {"client_telegram_user_id": 2000001, "booking_id": 43},
+                ),
+                call_next,
+            )
         )
-        third_status, third_body = _asgi_request(
-            "POST",
-            "/internal/telegram/client/booking-flow/cancel",
-            {"client_telegram_user_id": 2000001, "booking_id": 44},
+        third = asyncio.run(
+            telegram_command_guards(
+                _build_request(
+                    "/internal/telegram/client/booking-flow/cancel",
+                    {"client_telegram_user_id": 2000001, "booking_id": 44},
+                ),
+                call_next,
+            )
         )
-
-        assert first_status == 200
-        assert second_status == 200
-        assert third_status == 429
-        assert json.loads(third_body.decode("utf-8"))["code"] == "throttled"
-
-        _, metrics_body = _asgi_request("GET", "/metrics")
-        metrics_text = metrics_body.decode("utf-8")
     finally:
         app.state.telegram_throttle = original_throttle
 
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert third.status_code == 429
+    assert json.loads(third.body.decode("utf-8"))["code"] == "throttled"
+
+    metrics_text = render_metrics()[0].decode("utf-8")
     allow_value = _metric_value(
         metrics_text,
         "bot_api_abuse_outcomes_total",
