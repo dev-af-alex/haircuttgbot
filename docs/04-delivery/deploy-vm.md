@@ -75,6 +75,7 @@ The bundle must not include real secret values.
   - after rotation, restart services and verify `/health`, `/metrics`, and smoke checks.
 - Minimum secret set:
   - `TELEGRAM_BOT_TOKEN`
+  - `TELEGRAM_UPDATES_MODE` (`polling` default in current baseline; `disabled` for maintenance windows)
   - `DATABASE_URL` (if not composed from service defaults)
   - any future third-party API keys
 
@@ -134,6 +135,7 @@ Create `/opt/haircuttgbot/shared/.env` from the template values:
 ```bash
 cat >/opt/haircuttgbot/shared/.env <<'ENV'
 TELEGRAM_BOT_TOKEN=replace_me
+TELEGRAM_UPDATES_MODE=polling
 # Optional when defaults are overridden:
 # DATABASE_URL=postgresql+psycopg://haircuttgbot:haircuttgbot@postgres:5432/haircuttgbot
 ENV

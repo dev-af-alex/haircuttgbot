@@ -1,12 +1,13 @@
 import logging
 import os
+from asyncio import Task, create_task
+from contextlib import asynccontextmanager, suppress
 from json import loads
-from contextlib import asynccontextmanager
 from datetime import date, datetime, time
 from json import JSONDecodeError
 from typing import Any
 
-from aiogram import Dispatcher
+from aiogram import Bot, Dispatcher
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -36,18 +37,95 @@ from app.throttling import TelegramCommandThrottle
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
+_TELEGRAM_UPDATES_MODE_ENV = "TELEGRAM_UPDATES_MODE"
+_TELEGRAM_UPDATES_MODE_POLLING = "polling"
+_TELEGRAM_UPDATES_MODE_DISABLED = "disabled"
+_TELEGRAM_UPDATES_MODE_DEFAULT = _TELEGRAM_UPDATES_MODE_POLLING
+_TELEGRAM_UPDATES_MODES = {
+    _TELEGRAM_UPDATES_MODE_POLLING,
+    _TELEGRAM_UPDATES_MODE_DISABLED,
+}
+
+
+def _resolve_telegram_updates_mode(raw_mode: str | None) -> str:
+    mode = (raw_mode or "").strip().lower()
+    if not mode:
+        return _TELEGRAM_UPDATES_MODE_DEFAULT
+    if mode in _TELEGRAM_UPDATES_MODES:
+        return mode
+    return _TELEGRAM_UPDATES_MODE_DISABLED
+
+
+def _resolve_telegram_runtime_policy(*, raw_mode: str | None, bot_token: str) -> dict[str, Any]:
+    mode = _resolve_telegram_updates_mode(raw_mode)
+    token_configured = bool(bot_token)
+    if mode == _TELEGRAM_UPDATES_MODE_POLLING and token_configured:
+        return {
+            "mode": mode,
+            "start_polling": True,
+            "reason": "enabled",
+        }
+    if mode == _TELEGRAM_UPDATES_MODE_POLLING and not token_configured:
+        return {
+            "mode": mode,
+            "start_polling": False,
+            "reason": "missing_token",
+        }
+    return {
+        "mode": mode,
+        "start_polling": False,
+        "reason": "mode_disabled",
+    }
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    runtime_policy = _resolve_telegram_runtime_policy(
+        raw_mode=os.getenv(_TELEGRAM_UPDATES_MODE_ENV),
+        bot_token=bot_token,
+    )
+    dispatcher = Dispatcher()
+    bot: Bot | None = None
+    polling_task: Task[Any] | None = None
 
-    # Keep aiogram integration point present in runtime skeleton.
-    _dispatcher = Dispatcher()
-    _ = _dispatcher
+    if runtime_policy["start_polling"]:
+        bot = Bot(token=bot_token)
+        polling_task = create_task(
+            dispatcher.start_polling(bot, handle_signals=False),
+            name="telegram-polling",
+        )
+        emit_event(
+            "telegram_updates_runtime_started",
+            mode=runtime_policy["mode"],
+        )
+    else:
+        emit_event(
+            "telegram_updates_runtime_disabled",
+            mode=runtime_policy["mode"],
+            reason=runtime_policy["reason"],
+        )
 
     set_service_health(True)
-    emit_event("startup", telegram_token_configured=bool(bot_token))
-    yield
+    emit_event(
+        "startup",
+        telegram_token_configured=bool(bot_token),
+        telegram_updates_mode=runtime_policy["mode"],
+        telegram_updates_runtime=(
+            "polling" if runtime_policy["start_polling"] else "disabled"
+        ),
+    )
+    try:
+        yield
+    finally:
+        dispatcher.stop_polling()
+        if polling_task is not None:
+            polling_task.cancel()
+            with suppress(Exception):
+                await polling_task
+        if bot is not None:
+            with suppress(Exception):
+                await bot.session.close()
 
 
 app = FastAPI(title="haircuttgbot-api", version="0.1.0", lifespan=lifespan)

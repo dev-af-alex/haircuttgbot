@@ -4,7 +4,7 @@ This document is selected and fixed by **Skill 01 (Bootstrap)**.
 
 ## Selected stack
 
-- Backend: Python 3.12, FastAPI, aiogram 3 (Telegram bot webhook/handlers in one service).
+- Backend: Python 3.12, FastAPI, aiogram 3 (polling-first Telegram runtime in one service; webhook mode deferred).
 - Frontend (if any): No separate frontend in MVP; Telegram bot UI only.
 - Database: PostgreSQL 16.
 - Cache/queue: Redis 7 (ephemeral state, throttling, optional job queue).

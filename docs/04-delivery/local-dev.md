@@ -13,7 +13,7 @@ A developer can run:
 - Docker Engine
 - Docker Compose v2 (`docker compose`)
 - Optional for host-side unit tests: Python 3.12 virtualenv with dependencies installed in `.venv`
-- Optional: copy `.env.example` to `.env` and set `TELEGRAM_BOT_TOKEN` for real Telegram integration tests
+- Optional: copy `.env.example` to `.env`, set `TELEGRAM_BOT_TOKEN`, and keep `TELEGRAM_UPDATES_MODE=polling` for real Telegram integration tests
 
 ## Local run steps (must be kept current)
 
@@ -27,7 +27,9 @@ A developer can run:
 5. Run smoke test (below)
 6. (Recommended) Run unit tests from project virtualenv:
    `.venv/bin/pytest -q`
-7. `docker compose down` to stop
+7. (Optional) Verify Telegram polling runtime state in startup logs:
+   `docker compose logs bot-api --tail=200 | grep 'telegram_updates_runtime'`
+8. `docker compose down` to stop
 
 ## Ports
 
@@ -309,6 +311,7 @@ PY`
 ## Notes
 
 - Runtime skeleton includes automatic migration execution via `migrate` service.
+- Telegram updates runtime mode is controlled by `TELEGRAM_UPDATES_MODE` (`polling` by default, `disabled` to skip aiogram polling startup).
 - Run host-side Python tooling via virtualenv binaries (for example: `.venv/bin/pytest`, `.venv/bin/bandit`).
 - Do not commit secrets or real bot tokens.
 - Backup rehearsal commands and retention baseline are documented in `docs/04-delivery/postgresql-backup-restore.md`.

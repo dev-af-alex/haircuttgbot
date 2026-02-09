@@ -45,6 +45,7 @@ services:
       dockerfile: Dockerfile
     environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_UPDATES_MODE: ${TELEGRAM_UPDATES_MODE:-polling}
       POSTGRES_DB: ${POSTGRES_DB:-haircuttgbot}
       POSTGRES_USER: ${POSTGRES_USER:-haircuttgbot}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-haircuttgbot}

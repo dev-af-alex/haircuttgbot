@@ -18,6 +18,11 @@
 - Caller authentication: `GET /health` is intentionally unauthenticated for liveness checks.
 - Permission checks: role resolution and RBAC decision endpoints support command authorization flow.
 
+Runtime ingress note:
+
+- Real Telegram updates ingress uses aiogram polling mode in current baseline (`TELEGRAM_UPDATES_MODE=polling`).
+- Webhook ingress mode is not enabled in this baseline.
+
 ## 4) Implemented endpoints
 
 - `GET /health`
@@ -240,6 +245,8 @@
   - `telegram_idempotency_replay`
   - `telegram_delivery_outcome`
   - `telegram_delivery_error`
+  - `telegram_updates_runtime_started`
+  - `telegram_updates_runtime_disabled`
 - Redaction policy:
   - Keys containing `token`, `secret`, `password`, `authorization`, `api_key`, `database_url` are replaced with `[REDACTED]`.
   - Raw `TELEGRAM_BOT_TOKEN` value is masked from any string field if present.

@@ -109,3 +109,12 @@ Rules:
     - Dependencies: EPIC-003, EPIC-007, EPIC-009.
     - Local-run impact: local compose run remains stable while adding duplicate-delivery guards and retry-oriented observability checks.
     - Delivered: Group 01 delivered accepted delivery-idempotency ADR + Telegram write-path replay guard + baseline replay tests; Group 02 delivered retry/error outcome classification + delivery observability metric/event mapping + duplicate-delivery smoke expansion; Group 03 delivered closure doc-sync and merge-gate readiness checks for epic close-out.
+
+- EPIC-011 — Real Telegram runtime integration (aiogram updates path) — Status: IN_PROGRESS
+    - Goal: connect aiogram handlers to existing booking/schedule services so the bot can be tested via real Telegram chats.
+    - Acceptance:
+        - incoming Telegram updates are processed through an implemented runtime path (polling or webhook) in local and VM environments.
+        - core role-specific flows (`Client` booking/cancel and `Master` schedule/cancel) are callable from real Telegram interactions.
+        - local runbook includes reproducible real Telegram test steps with safe fallback to current internal smoke checks.
+    - Dependencies: EPIC-003, EPIC-004, EPIC-005, EPIC-006, EPIC-010.
+    - Local-run impact: compose runtime adds bot update processing while preserving existing API/smoke behavior and security gates.
