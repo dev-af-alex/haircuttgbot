@@ -203,6 +203,9 @@ When Telegram token is configured, additionally validate button-first chat flows
 - `Client` mixed-duration check: `Стрижка` shows 30-minute slot range labels (for example `10:00-10:30`), `Стрижка + борода` remains hourly (`10:00-11:00`).
 - `Client` same-day guardrail: if current time in `BUSINESS_TIMEZONE` is `15:00`, slots earlier than `15:30` are not available/confirmable.
 - `Master`: `/start` shows greeting and opens `Меню мастера` directly, then schedule view + day-off + lunch update + manual booking + cancellation with reason via buttons; schedule view first requires date selection and outputs should use readable labels (`DD.MM.YYYY HH:MM`, `HH:MM-HH:MM`).
+  - `Ручная запись` must request manual client free-text input and show `Клиент` + exact `Слот` in confirmation/result.
+  - booking-created notification to master must include client identity context (`@nickname`, and phone when present) plus exact slot datetime.
+  - master-cancel notification to client must include cancellation reason and exact cancelled slot datetime.
 - `Master` day-off guardrail: on date with active bookings, day-off action returns deterministic rejection about existing bookings.
 - `Bootstrap master`: `Управление мастерами` -> ensure target user has executed `/start` and has stored `users.telegram_username` -> add by `@nickname` (plus invalid/unknown rejection checks) -> rename target master (plus invalid-name rejection) -> remove same master.
 
@@ -310,7 +313,7 @@ Run canonical smoke steps from `docs/04-delivery/local-dev.md`:
 - client cancellation + master cancellation-without-reason rejection
 - master day-off update
 - master lunch update
-- master manual booking success + overlap rejection
+- master manual booking success + overlap rejection + empty-client-text rejection
 - bootstrap-master add/remove flow success + non-bootstrap deny
 - bootstrap-master rename flow success + invalid-input rejection + non-bootstrap deny
 

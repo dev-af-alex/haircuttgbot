@@ -142,11 +142,53 @@ class BookingService:
             if blocked is not None:
                 return BookingCreateResult(created=False, message=RU_BOOKING_MESSAGES["slot_not_available"])
 
+            client_username_snapshot: str | None = None
+            client_phone_snapshot: str | None = None
+            try:
+                client_row = conn.execute(
+                    text(
+                        """
+                        SELECT telegram_username, phone_number
+                        FROM users
+                        WHERE id = :client_user_id
+                        """
+                    ),
+                    {"client_user_id": client_user_id},
+                ).mappings().first()
+                if client_row is not None:
+                    client_username_snapshot = (
+                        str(client_row["telegram_username"]) if client_row["telegram_username"] is not None else None
+                    )
+                    client_phone_snapshot = (
+                        str(client_row["phone_number"]) if client_row["phone_number"] is not None else None
+                    )
+            except Exception:
+                # Some tests use reduced schemas without users table; snapshots are optional.
+                pass
+
             booking_id = conn.execute(
                 text(
                     """
-                    INSERT INTO bookings (master_id, client_user_id, service_type, slot_start, slot_end, status)
-                    VALUES (:master_id, :client_user_id, :service_type, :slot_start, :slot_end, :status)
+                    INSERT INTO bookings (
+                        master_id,
+                        client_user_id,
+                        service_type,
+                        slot_start,
+                        slot_end,
+                        status,
+                        client_username_snapshot,
+                        client_phone_snapshot
+                    )
+                    VALUES (
+                        :master_id,
+                        :client_user_id,
+                        :service_type,
+                        :slot_start,
+                        :slot_end,
+                        :status,
+                        :client_username_snapshot,
+                        :client_phone_snapshot
+                    )
                     RETURNING id
                     """
                 ),
@@ -157,6 +199,8 @@ class BookingService:
                     "slot_start": slot_start_utc,
                     "slot_end": slot_end_utc,
                     "status": BOOKING_STATUS_ACTIVE,
+                    "client_username_snapshot": client_username_snapshot,
+                    "client_phone_snapshot": client_phone_snapshot,
                 },
             ).scalar_one()
 

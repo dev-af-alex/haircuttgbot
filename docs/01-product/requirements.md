@@ -45,6 +45,9 @@ Write as “The system shall ...”
 - FR-019: The system shall apply a default lunch break from 13:00 to 14:00 for each master.
 - FR-020: The system shall allow the master to change their lunch-break time.
 - FR-021: The system shall provide Russian (`ru`) localization for bot messages in MVP.
+- FR-022: The system shall include client identity context in master booking notifications (Telegram nickname when available, and phone when available).
+- FR-023: The system shall include exact booking date/time in client notifications when booking is cancelled by a master.
+- FR-024: The system shall allow masters to provide arbitrary free-text client reference in manual booking flow and persist it for schedule/notification rendering.
 
 ## 5) Non-goals (explicit exclusions)
 

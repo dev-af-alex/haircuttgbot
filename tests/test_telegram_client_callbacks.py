@@ -25,6 +25,7 @@ def _setup_flow_schema() -> Engine:
                     id INTEGER PRIMARY KEY,
                     telegram_user_id BIGINT UNIQUE NOT NULL,
                     telegram_username TEXT,
+                    phone_number TEXT,
                     role_id INTEGER NOT NULL
                 )
                 """
@@ -56,6 +57,9 @@ def _setup_flow_schema() -> Engine:
                     service_type TEXT,
                     status TEXT NOT NULL,
                     cancellation_reason TEXT,
+                    manual_client_name TEXT,
+                    client_username_snapshot TEXT,
+                    client_phone_snapshot TEXT,
                     slot_start DATETIME NOT NULL,
                     slot_end DATETIME NOT NULL
                 )

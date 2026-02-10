@@ -24,6 +24,7 @@ class BookingCancelResult:
     master_id: int | None = None
     client_user_id: int | None = None
     cancellation_reason: str | None = None
+    slot_start: datetime | None = None
 
 
 class BookingCancellationService:
@@ -94,6 +95,7 @@ class BookingCancellationService:
                 booking_id=int(booking["id"]),
                 master_id=int(booking["master_id"]),
                 client_user_id=client_user_id,
+                slot_start=slot_start,
             )
 
     def cancel_by_master(
@@ -168,6 +170,7 @@ class BookingCancellationService:
                 master_id=int(booking["master_id"]),
                 client_user_id=int(booking["client_user_id"]),
                 cancellation_reason=normalized_reason,
+                slot_start=slot_start,
             )
 
 

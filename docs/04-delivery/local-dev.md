@@ -107,7 +107,11 @@ Use this sequence when validating aiogram runtime against a real Telegram chat.
      - `Просмотр расписания` output uses `DD.MM.YYYY HH:MM` slot labels and `HH:MM-HH:MM` lunch interval;
      - `Просмотр расписания` first asks for target date, then returns schedule for selected date;
      - `Выходной день` and `Обед` confirmations include readable interval/date details;
-     - `Ручная запись` and `Отмена записи` confirmations include readable `Слот` details and reason context.
+     - `Ручная запись` asks for free-text client value (любой текст), and confirmation/result include `Клиент` + readable `Слот` details;
+     - `Отмена записи` confirmations include readable `Слот` details and reason context.
+   - verify informative notifications:
+     - on client booking creation master notification includes client context (`@nickname`, and phone when present) plus exact slot date/time;
+     - on master cancellation client notification includes reason and exact cancelled slot date/time.
    - validate EPIC-016 guardrails:
      - if current time in `BUSINESS_TIMEZONE` is `15:00`, in client `Новая запись` same-day slots earlier than `15:30` are not offered;
      - for an occupied date, `Выходной день` returns rejection text about existing active bookings.

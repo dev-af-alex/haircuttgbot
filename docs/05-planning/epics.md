@@ -231,3 +231,34 @@ Rules:
     - Dependencies: EPIC-014, EPIC-016, EPIC-020.
     - Local-run impact: `.env`/compose contract gains timezone variable; smoke assertions become timezone-aware for date/slot windows and readable time formatting.
     - Delivered: Group 01 accepted ADR-0018 and introduced validated `BUSINESS_TIMEZONE` with shared UTC/business-time helpers; Group 02 switched booking/schedule/callback time semantics to business timezone with UTC persistence boundaries; Group 03 added timezone + DST regression coverage and synchronized local/VM smoke runbooks.
+
+- EPIC-022 — Informative booking/cancellation notifications and manual-client text in master booking — Status: DONE
+    - Goal: make booking/cancellation notifications context-rich for both roles and allow master manual booking flow to accept arbitrary client text.
+    - Acceptance:
+        - Master booking-created notification includes client identity context (Telegram nickname when available, plus phone if present in stored profile/contact data) and exact booking date/time.
+        - Client cancellation notification (when cancelled by master) includes exact cancelled booking date/time in readable localized format.
+        - Master manual booking flow supports explicit free-text client field (not only existing Telegram user), stores it deterministically, and shows it in master schedule/notification texts.
+        - Existing RBAC, cancellation-reason requirement, and readable `ru` datetime formatting remain intact and regression-tested.
+    - Dependencies: EPIC-005, EPIC-006, EPIC-015, EPIC-021.
+    - Local-run impact: smoke and Telegram validation steps extend to assert richer notification payloads and manual free-text client scenarios.
+    - Delivered: notification context data model extension (manual client name + username/phone snapshots), enriched master/client notification texts with exact slot datetime, manual-booking free-text client input in Telegram callbacks, observability phone redaction update, and synchronized SSOT delivery docs with full regression/smoke coverage.
+
+- EPIC-023 — Time-window reminder notifications (2 hours before appointment) — Status: TODO
+    - Goal: add proactive reminder notifications for clients exactly for appointments created more than 2 hours before slot start.
+    - Acceptance:
+        - System schedules and sends reminder to client 2 hours before appointment start in `BUSINESS_TIMEZONE`.
+        - If booking is created less than 2 hours before slot start, reminder is not scheduled/sent.
+        - Reminder processing is idempotent and resilient to retries/restarts (no duplicate reminders for one booking).
+        - Local regression/smoke covers positive reminder case and "no reminder when <2h lead time" case.
+    - Dependencies: EPIC-007, EPIC-010, EPIC-021, EPIC-022.
+    - Local-run impact: compose runtime gains/remains background scheduler/worker path for reminder dispatch, with deterministic test hooks for time-based validation.
+
+- EPIC-024 — Booking query performance optimization and DB indexing baseline — Status: TODO
+    - Goal: reduce slow booking/schedule query paths (currently observed around 1200 ms) via indexing and query-plan optimization with measurable latency improvements.
+    - Acceptance:
+        - Critical booking/schedule read paths are profiled (`EXPLAIN ANALYZE` and application timing) and top slow queries are documented.
+        - Required DB indexes and/or query rewrites are implemented with migration coverage and validated for correctness.
+        - p95 latency for targeted critical paths improves from current ~1200 ms baseline to <= 600 ms under defined local load profile.
+        - Monitoring and smoke/perf-check docs include repeatable measurement steps and rollback-safe index migration notes.
+    - Dependencies: EPIC-002, EPIC-004, EPIC-006, EPIC-007, EPIC-021.
+    - Local-run impact: local validation adds repeatable perf-check commands/scenarios in addition to functional smoke, while keeping `docker compose up -d` workflow unchanged.

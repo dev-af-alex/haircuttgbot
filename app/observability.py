@@ -20,6 +20,7 @@ _SENSITIVE_KEY_PARTS = (
     "authorization",
     "api_key",
     "database_url",
+    "phone",
 )
 _REDACTED = "[REDACTED]"
 _METRICS_LOCK = threading.Lock()

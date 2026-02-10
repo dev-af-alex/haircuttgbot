@@ -43,6 +43,9 @@ def _setup_booking_schema() -> Engine:
                     service_type TEXT,
                     status TEXT NOT NULL,
                     cancellation_reason TEXT,
+                    manual_client_name TEXT,
+                    client_username_snapshot TEXT,
+                    client_phone_snapshot TEXT,
                     slot_start DATETIME NOT NULL,
                     slot_end DATETIME NOT NULL
                 )
@@ -106,9 +109,11 @@ def test_emit_event_redacts_sensitive_values(monkeypatch, caplog) -> None:
         "observability_contract_test",
         telegram_token_configured=True,
         telegram_bot_token=token_value,
+        client_phone="+79991234567",
         nested={
             "authorization": f"Bearer {token_value}",
             "password": "my_password",
+            "phone_number": "+79990000000",
             "safe": "ok",
         },
         note=f"token={token_value}",
@@ -121,8 +126,10 @@ def test_emit_event_redacts_sensitive_values(monkeypatch, caplog) -> None:
     assert "ts" in payload
     assert payload["telegram_token_configured"] is True
     assert payload["telegram_bot_token"] == "[REDACTED]"
+    assert payload["client_phone"] == "[REDACTED]"
     assert payload["nested"]["authorization"] == "[REDACTED]"
     assert payload["nested"]["password"] == "[REDACTED]"
+    assert payload["nested"]["phone_number"] == "[REDACTED]"
     assert payload["nested"]["safe"] == "ok"
     assert payload["note"] == "token=[REDACTED]"
     assert token_value not in caplog.records[-1].message

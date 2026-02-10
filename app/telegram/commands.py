@@ -26,7 +26,7 @@ _HELP_TEXT = """Доступные команды:
 /master_cancel <booking_id> <reason>
 /master_dayoff <YYYY-MM-DDTHH:MM:SS+00:00> <YYYY-MM-DDTHH:MM:SS+00:00> [block_id]
 /master_lunch <HH:MM:SS> <HH:MM:SS>
-/master_manual <service_type> <YYYY-MM-DDTHH:MM:SS+00:00> <client_name>
+/master_manual <service_type> <YYYY-MM-DDTHH:MM:SS+00:00> <client_text>
 """
 
 

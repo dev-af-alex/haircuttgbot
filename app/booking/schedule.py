@@ -337,6 +337,19 @@ class MasterScheduleService:
             )
 
         slot_start = _to_utc(command.slot_start)
+        manual_client_name = command.client_name.strip()
+        if not manual_client_name:
+            return MasterManualBookingResult(
+                applied=False,
+                booking_id=None,
+                message=RU_BOOKING_MESSAGES["manual_booking_client_required"],
+            )
+        if len(manual_client_name) > 160:
+            return MasterManualBookingResult(
+                applied=False,
+                booking_id=None,
+                message=RU_BOOKING_MESSAGES["manual_booking_client_too_long"],
+            )
 
         with self._engine.begin() as conn:
             duration_minutes = resolve_service_duration_minutes(command.service_type, connection=conn)
@@ -465,8 +478,24 @@ class MasterScheduleService:
             booking_id = conn.execute(
                 text(
                     """
-                    INSERT INTO bookings (master_id, client_user_id, service_type, slot_start, slot_end, status)
-                    VALUES (:master_id, :client_user_id, :service_type, :slot_start, :slot_end, :status)
+                    INSERT INTO bookings (
+                        master_id,
+                        client_user_id,
+                        service_type,
+                        slot_start,
+                        slot_end,
+                        status,
+                        manual_client_name
+                    )
+                    VALUES (
+                        :master_id,
+                        :client_user_id,
+                        :service_type,
+                        :slot_start,
+                        :slot_end,
+                        :status,
+                        :manual_client_name
+                    )
                     RETURNING id
                     """
                 ),
@@ -477,6 +506,7 @@ class MasterScheduleService:
                     "slot_start": slot_start,
                     "slot_end": slot_end,
                     "status": BOOKING_STATUS_ACTIVE,
+                    "manual_client_name": manual_client_name,
                 },
             ).scalar_one()
             return MasterManualBookingResult(

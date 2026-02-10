@@ -36,6 +36,7 @@ def test_run_seed_idempotency_with_file_backed_sqlite(tmp_path) -> None:
                     id INTEGER PRIMARY KEY,
                     telegram_user_id BIGINT UNIQUE NOT NULL,
                     telegram_username TEXT,
+                    phone_number TEXT,
                     role_id INTEGER NOT NULL
                 )
                 """

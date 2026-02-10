@@ -25,6 +25,7 @@ def _setup_flow_schema() -> Engine:
                     id INTEGER PRIMARY KEY,
                     telegram_user_id BIGINT UNIQUE NOT NULL,
                     telegram_username TEXT,
+                    phone_number TEXT,
                     role_id INTEGER NOT NULL
                 )
                 """
@@ -56,6 +57,9 @@ def _setup_flow_schema() -> Engine:
                     service_type TEXT,
                     status TEXT NOT NULL,
                     cancellation_reason TEXT,
+                    manual_client_name TEXT,
+                    client_username_snapshot TEXT,
+                    client_phone_snapshot TEXT,
                     slot_start DATETIME NOT NULL,
                     slot_end DATETIME NOT NULL
                 )
@@ -202,12 +206,18 @@ def test_master_interactive_schedule_dayoff_lunch_manual_flow() -> None:
     assert any(item.rsplit("|", 1)[-1].endswith("30") for item in slot_callbacks)
 
     result = router.handle(telegram_user_id=1000001, data=slot_callbacks[0])
-    assert "Подтвердите ручную запись" in result.text
+    assert "Введите клиента для ручной записи" in result.text
     assert re.search(r"Слот: \d{2}\.\d{2}\.\d{4} \d{2}:\d{2}", result.text)
+
+    result = router.handle_text(telegram_user_id=1000001, text_value="Гость с улицы")
+    assert result is not None
+    assert "Подтвердите ручную запись" in result.text
+    assert "Клиент: Гость с улицы" in result.text
 
     result = router.handle(telegram_user_id=1000001, data="hb1|mbc")
     assert "Ручная запись создана" in result.text
     assert "Слот:" in result.text
+    assert "Клиент: Гость с улицы" in result.text
     assert re.search(r"\d{2}:\d{2}-\d{2}:\d{2}", result.text)
 
 

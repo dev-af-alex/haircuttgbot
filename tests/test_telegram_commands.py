@@ -22,6 +22,8 @@ def _setup_schema() -> Engine:
                 CREATE TABLE users (
                     id INTEGER PRIMARY KEY,
                     telegram_user_id BIGINT UNIQUE NOT NULL,
+                    telegram_username TEXT,
+                    phone_number TEXT,
                     role_id INTEGER NOT NULL
                 )
                 """
@@ -53,6 +55,9 @@ def _setup_schema() -> Engine:
                     service_type TEXT,
                     status TEXT NOT NULL,
                     cancellation_reason TEXT,
+                    manual_client_name TEXT,
+                    client_username_snapshot TEXT,
+                    client_phone_snapshot TEXT,
                     slot_start DATETIME NOT NULL,
                     slot_end DATETIME NOT NULL
                 )
@@ -77,11 +82,11 @@ def _setup_schema() -> Engine:
         conn.execute(
             text(
                 """
-                INSERT INTO users (id, telegram_user_id, role_id)
+                INSERT INTO users (id, telegram_user_id, telegram_username, role_id)
                 VALUES
-                    (10, 1000001, 2),
-                    (20, 2000001, 1),
-                    (21, 2000002, 1)
+                    (10, 1000001, 'owner_master', 2),
+                    (20, 2000001, 'client_a', 1),
+                    (21, 2000002, 'client_b', 1)
                 """
             )
         )

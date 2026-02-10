@@ -38,7 +38,7 @@ Telegram command contract baseline:
   - `/master_cancel <booking_id> <reason>`
   - `/master_dayoff <YYYY-MM-DDTHH:MM:SS+00:00> <YYYY-MM-DDTHH:MM:SS+00:00> [block_id]`
   - `/master_lunch <HH:MM:SS> <HH:MM:SS>`
-  - `/master_manual <service_type> <YYYY-MM-DDTHH:MM:SS+00:00> <client_name>`
+  - `/master_manual <service_type> <YYYY-MM-DDTHH:MM:SS+00:00> <client_text>`
 
 ## 4) Implemented endpoints
 
@@ -132,7 +132,7 @@ Telegram command contract baseline:
   - Request:
     `{"client_telegram_user_id":2000001,"master_id":1,"service_type":"haircut","slot_start":"2026-02-12T10:00:00+00:00"}`
   - Response `200` (success):
-    `{"created":true,"booking_id":42,"message":"Запись успешно создана.","notifications":[{"recipient_telegram_user_id":2000001,"message":"Запись подтверждена."},{"recipient_telegram_user_id":1000001,"message":"Новая запись клиента добавлена в расписание."}]}`
+    `{"created":true,"booking_id":42,"message":"Запись успешно создана.","notifications":[{"recipient_telegram_user_id":2000001,"message":"Запись подтверждена."},{"recipient_telegram_user_id":1000001,"message":"Новая запись клиента добавлена в расписание.\nКлиент: @client_a\nТелефон: +79991234567\nСлот: 12.02.2026 13:00\nУслуга: Стрижка"}]}`
   - Idempotency notes:
     - Duplicate delivery in replay window returns cached success payload.
     - Replay response includes header `X-Idempotency-Replayed: 1`.
@@ -156,7 +156,7 @@ Telegram command contract baseline:
   - Request:
     `{"master_telegram_user_id":1000001,"booking_id":42,"reason":"Непредвиденные обстоятельства"}`
   - Response `200` (success):
-    `{"cancelled":true,"booking_id":42,"message":"Запись успешно отменена.","notifications":[{"recipient_telegram_user_id":2000001,"message":"Мастер отменил запись. Причина: Непредвиденные обстоятельства"},{"recipient_telegram_user_id":1000001,"message":"Запись клиента отменена."}]}`
+    `{"cancelled":true,"booking_id":42,"message":"Запись успешно отменена.","notifications":[{"recipient_telegram_user_id":2000001,"message":"Мастер отменил запись. Причина: Непредвиденные обстоятельства\nСлот: 13.02.2026 13:00"},{"recipient_telegram_user_id":1000001,"message":"Запись клиента отменена."}]}`
   - Response `200` (rejected example):
     `{"cancelled":false,"booking_id":null,"message":"Укажите причину отмены.","notifications":[]}`
   - Response `429` (abuse throttled):
@@ -171,7 +171,7 @@ Telegram command contract baseline:
 - Master schedule command contracts (baseline)
   - `day_off`: `{"master_telegram_user_id":1000001,"start_at":"2026-02-14T15:00:00+00:00","end_at":"2026-02-14T17:00:00+00:00","block_id":null}`
   - `lunch_update`: `{"master_telegram_user_id":1000001,"lunch_start":"15:00:00","lunch_end":"16:00:00"}`
-  - `manual_booking`: `{"master_telegram_user_id":1000001,"client_name":"Client Demo","service_type":"haircut","slot_start":"2026-02-14T12:00:00+00:00"}`
+  - `manual_booking`: `{"master_telegram_user_id":1000001,"client_name":"Новый клиент (walk-in)","service_type":"haircut","slot_start":"2026-02-14T12:00:00+00:00"}`
   - Ownership resolution: every master schedule command resolves `master_telegram_user_id -> users.id -> masters.id` and applies changes only to that master profile.
 
 - `POST /internal/telegram/master/schedule/day-off`
@@ -228,6 +228,7 @@ Telegram command contract baseline:
     - Replay response includes header `X-Idempotency-Replayed: 1`.
   - Behavior notes:
     - Applies ownership check to target master profile.
+    - `client_name` accepts arbitrary non-empty text (up to 160 chars) and is persisted in booking context.
     - Rejects overlap with active bookings, day-off blocks, and lunch interval using shared half-open interval predicate.
     - Created manual booking occupies slot for subsequent availability and booking checks.
 
@@ -271,5 +272,5 @@ Telegram command contract baseline:
   - `telegram_updates_runtime_started`
   - `telegram_updates_runtime_disabled`
 - Redaction policy:
-  - Keys containing `token`, `secret`, `password`, `authorization`, `api_key`, `database_url` are replaced with `[REDACTED]`.
+  - Keys containing `token`, `secret`, `password`, `authorization`, `api_key`, `database_url`, `phone` are replaced with `[REDACTED]`.
   - Raw `TELEGRAM_BOT_TOKEN` value is masked from any string field if present.

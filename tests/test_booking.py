@@ -63,6 +63,9 @@ def _setup_availability_schema() -> Engine:
                     service_type TEXT,
                     status TEXT NOT NULL,
                     cancellation_reason TEXT,
+                    manual_client_name TEXT,
+                    client_username_snapshot TEXT,
+                    client_phone_snapshot TEXT,
                     slot_start DATETIME NOT NULL,
                     slot_end DATETIME NOT NULL
                 )
@@ -131,6 +134,8 @@ def _setup_telegram_flow_schema() -> Engine:
                 CREATE TABLE users (
                     id INTEGER PRIMARY KEY,
                     telegram_user_id BIGINT UNIQUE NOT NULL,
+                    telegram_username TEXT,
+                    phone_number TEXT,
                     role_id INTEGER NOT NULL
                 )
                 """
@@ -162,6 +167,9 @@ def _setup_telegram_flow_schema() -> Engine:
                     service_type TEXT,
                     status TEXT NOT NULL,
                     cancellation_reason TEXT,
+                    manual_client_name TEXT,
+                    client_username_snapshot TEXT,
+                    client_phone_snapshot TEXT,
                     slot_start DATETIME NOT NULL,
                     slot_end DATETIME NOT NULL
                 )
@@ -199,12 +207,12 @@ def _setup_telegram_flow_schema() -> Engine:
         conn.execute(
             text(
                 """
-                INSERT INTO users (id, telegram_user_id, role_id)
+                INSERT INTO users (id, telegram_user_id, telegram_username, phone_number, role_id)
                 VALUES
-                    (10, 1000001, 2),
-                    (11, 1000002, 2),
-                    (20, 2000001, 1),
-                    (21, 2000002, 1)
+                    (10, 1000001, 'owner_master', NULL, 2),
+                    (11, 1000002, 'worker_master', NULL, 2),
+                    (20, 2000001, 'client_a', '+79991234567', 1),
+                    (21, 2000002, 'client_b', NULL, 1)
                 """
             )
         )
@@ -960,11 +968,12 @@ def test_master_manual_booking_success_and_availability_exclusion() -> None:
 
     with engine.connect() as conn:
         row = conn.execute(
-            text("SELECT client_user_id, status FROM bookings WHERE id = :id"),
+            text("SELECT client_user_id, status, manual_client_name FROM bookings WHERE id = :id"),
             {"id": manual.booking_id},
         ).mappings().one()
     assert row["client_user_id"] is not None
     assert row["status"] == "active"
+    assert row["manual_client_name"] == "Offline Client"
 
     slots = availability.list_slots(
         master_id=1,
@@ -1039,6 +1048,17 @@ def test_master_manual_booking_rejects_overlap_and_unavailable_slots() -> None:
     )
     assert lunch_conflict.applied is False
 
+    empty_name = service.create_manual_booking(
+        master_telegram_user_id=1000001,
+        command=MasterManualBookingCommand(
+            client_name="   ",
+            service_type="haircut",
+            slot_start=datetime(2026, 2, 16, 19, 0, tzinfo=UTC),
+        ),
+    )
+    assert empty_name.applied is False
+    assert "Укажите клиента" in empty_name.message
+
 
 def test_telegram_booking_flow_start_and_select_steps() -> None:
     engine = _setup_telegram_flow_schema()
@@ -1111,6 +1131,10 @@ def test_telegram_booking_flow_confirm_sends_notifications_and_rejects_second_fu
     assert len(notifications) == 2
     recipients = {item["recipient_telegram_user_id"] for item in notifications}
     assert recipients == {2000001, 1000001}
+    master_message = next(item["message"] for item in notifications if item["recipient_telegram_user_id"] == 1000001)
+    assert "Клиент: @client_a" in master_message
+    assert "Телефон: +79991234567" in master_message
+    assert "Слот:" in master_message
 
     second = flow.confirm(
         client_telegram_user_id=2000001,
@@ -1180,3 +1204,4 @@ def test_telegram_master_cancel_sends_reason_to_client_and_rejects_without_reaso
         item["message"] for item in notifications if item["recipient_telegram_user_id"] == 2000001
     )
     assert "Непредвиденные обстоятельства" in client_message
+    assert "Слот:" in client_message

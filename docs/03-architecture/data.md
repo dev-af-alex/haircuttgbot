@@ -3,9 +3,9 @@
 ## 1) Core entities
 
 - `roles`: role dictionary (`Client`, `Master`).
-- `users`: Telegram identity + role mapping.
+- `users`: Telegram identity + role mapping (+ optional contact fields `telegram_username`, `phone_number`).
 - `masters`: master profile and working window defaults (10:00-21:00, lunch 13:00-14:00).
-- `bookings`: client-master time slot reservations and status lifecycle.
+- `bookings`: client-master time slot reservations and status lifecycle (+ notification-context snapshots and optional manual client text).
 - `availability_blocks`: day-off, lunch-break, and manual unavailability windows.
 - `audit_events`: security/booking lifecycle event log.
 
@@ -22,6 +22,7 @@
 - `bookings` has partial unique index `ux_bookings_master_slot_active` to prevent two active bookings for same master+slot.
 - `bookings.slot_end > bookings.slot_start` check.
 - `availability_blocks.end_at > availability_blocks.start_at` check.
+- `bookings.manual_client_name` is populated for master-created manual bookings and used in schedule/notification rendering.
 
 ## 4) Data lifecycle
 

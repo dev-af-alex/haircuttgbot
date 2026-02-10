@@ -46,7 +46,6 @@ from app.telegram.presentation import (
 
 CALLBACK_DATA_MAX_LENGTH = 64
 CALLBACK_PREFIX = "hb1"
-_MANUAL_BOOKING_CLIENT_NAME = "Manual Bot Client"
 _MASTER_CANCEL_REASONS = {
     "busy": "Плотная загрузка мастера.",
     "sick": "Мастер заболел.",
@@ -154,6 +153,7 @@ _MENU_MASTER_LUNCH_SELECT = "master_lunch_select"
 _MENU_MASTER_MANUAL_SERVICE_SELECT = "master_manual_service_select"
 _MENU_MASTER_MANUAL_DATE_SELECT = "master_manual_date_select"
 _MENU_MASTER_MANUAL_SLOT_SELECT = "master_manual_slot_select"
+_MENU_MASTER_MANUAL_CLIENT_INPUT = "master_manual_client_input"
 _MENU_MASTER_MANUAL_CONFIRM = "master_manual_confirm"
 _MENU_MASTER_CANCEL_SELECT = "master_cancel_select"
 _MENU_MASTER_CANCEL_REASON_SELECT = "master_cancel_reason_select"
@@ -182,6 +182,7 @@ _MENU_ALLOWED_ACTIONS = {
     _MENU_MASTER_MANUAL_SERVICE_SELECT: {"hm", "mr", "mbs"},
     _MENU_MASTER_MANUAL_DATE_SELECT: {"hm", "mr", "mbd"},
     _MENU_MASTER_MANUAL_SLOT_SELECT: {"hm", "mr", "mbl"},
+    _MENU_MASTER_MANUAL_CLIENT_INPUT: {"hm", "mr"},
     _MENU_MASTER_MANUAL_CONFIRM: {"hm", "mr", "mbc"},
     _MENU_MASTER_CANCEL_SELECT: {"hm", "mr", "mci"},
     _MENU_MASTER_CANCEL_REASON_SELECT: {"hm", "mr", "mcr"},
@@ -206,6 +207,7 @@ _MASTER_ADMIN_ADD_NICKNAME_PROMPT = (
     "Введите nickname пользователя для назначения мастером (формат: @nickname)."
 )
 _MASTER_ADMIN_RENAME_PROMPT = "Введите новое имя мастера (1-64 символа)."
+_MASTER_MANUAL_CLIENT_PROMPT = "Введите клиента для ручной записи (любой текст, до 160 символов)."
 
 _ACTION_TARGET_MENU = {
     "hm": _MENU_ROOT,
@@ -470,8 +472,40 @@ class TelegramCallbackRouter:
             _MENU_MASTER_ADMIN_ADD_SELECT,
             _MENU_MASTER_ADMIN_ADD_NICKNAME_INPUT,
             _MENU_MASTER_ADMIN_RENAME_INPUT,
+            _MENU_MASTER_MANUAL_CLIENT_INPUT,
         }:
             return None
+
+        if current_menu == _MENU_MASTER_MANUAL_CLIENT_INPUT:
+            service_type = self._state.get_context_value(telegram_user_id, "master_manual_service")
+            slot_token = self._state.get_context_value(telegram_user_id, "master_manual_slot")
+            if service_type is None or slot_token is None:
+                return self._stale_response(telegram_user_id=telegram_user_id)
+            manual_client_name = text_value.strip()
+            if not manual_client_name:
+                return CallbackHandleResult(
+                    text=f"{RU_BOOKING_MESSAGES['manual_booking_client_required']}\n{_MASTER_MANUAL_CLIENT_PROMPT}",
+                    reply_markup=build_master_manual_client_input_markup(),
+                )
+            if len(manual_client_name) > 160:
+                return CallbackHandleResult(
+                    text=f"{RU_BOOKING_MESSAGES['manual_booking_client_too_long']}\n{_MASTER_MANUAL_CLIENT_PROMPT}",
+                    reply_markup=build_master_manual_client_input_markup(),
+                )
+            self._state.set_context_value(telegram_user_id, "master_manual_client_name", manual_client_name)
+            self._state.set_menu(telegram_user_id, _MENU_MASTER_MANUAL_CONFIRM)
+            try:
+                slot_start = _parse_slot_token(slot_token)
+            except ValueError:
+                return self._invalid_response(telegram_user_id=telegram_user_id)
+            return CallbackHandleResult(
+                text=_build_master_manual_confirmation_text(
+                    service_type=service_type,
+                    slot_start=slot_start,
+                    client_name=manual_client_name,
+                ),
+                reply_markup=build_master_manual_confirm_markup(),
+            )
 
         if not self._is_bootstrap_master(telegram_user_id=telegram_user_id):
             observe_master_admin_outcome("rbac", "denied")
@@ -811,13 +845,19 @@ class TelegramCallbackRouter:
             rows = conn.execute(
                 text(
                     """
-                    SELECT slot_start, service_type
-                    FROM bookings
-                    WHERE master_id = :master_id
-                      AND status = 'active'
-                      AND slot_start >= :day_start
-                      AND slot_start < :day_end
-                    ORDER BY slot_start
+                    SELECT
+                        b.slot_start,
+                        b.service_type,
+                        b.manual_client_name,
+                        COALESCE(b.client_username_snapshot, u.telegram_username) AS client_username,
+                        COALESCE(b.client_phone_snapshot, u.phone_number) AS client_phone
+                    FROM bookings b
+                    LEFT JOIN users u ON u.id = b.client_user_id
+                    WHERE b.master_id = :master_id
+                      AND b.status = 'active'
+                      AND b.slot_start >= :day_start
+                      AND b.slot_start < :day_end
+                    ORDER BY b.slot_start
                     """
                 ),
                 {"master_id": master_ctx.master_id, "day_start": day_start, "day_end": day_end},
@@ -835,8 +875,15 @@ class TelegramCallbackRouter:
             slot_start = row["slot_start"]
             slot_start_dt = slot_start if isinstance(slot_start, datetime) else datetime.fromisoformat(str(slot_start))
             service_type = str(row["service_type"])
+            client_line = _format_client_context(
+                manual_client_name=_as_str_or_none(row["manual_client_name"]),
+                client_username=_as_str_or_none(row["client_username"]),
+                client_phone=_as_str_or_none(row["client_phone"]),
+                fallback="не указан",
+            )
             lines.append(
-                f"- {format_ru_datetime(slot_start_dt)} ({SERVICE_OPTION_LABELS_RU.get(service_type, service_type)})"
+                f"- {format_ru_datetime(slot_start_dt)} ({SERVICE_OPTION_LABELS_RU.get(service_type, service_type)})\n"
+                f"  {client_line}"
             )
             has_rows = True
         if not has_rows:
@@ -986,23 +1033,23 @@ class TelegramCallbackRouter:
             return self._stale_response(telegram_user_id=telegram_user_id)
 
         self._state.set_context_value(telegram_user_id, "master_manual_slot", context)
-        self._state.set_menu(telegram_user_id, _MENU_MASTER_MANUAL_CONFIRM)
+        self._state.set_menu(telegram_user_id, _MENU_MASTER_MANUAL_CLIENT_INPUT)
 
         slot_start = _parse_slot_token(context)
         return CallbackHandleResult(
             text=(
-                "Подтвердите ручную запись:\n"
+                f"{_MASTER_MANUAL_CLIENT_PROMPT}\n"
                 f"- Услуга: {SERVICE_OPTION_LABELS_RU.get(service_type, service_type)}\n"
-                f"- Слот: {format_ru_datetime(slot_start)}\n"
-                f"- Клиент: {_MANUAL_BOOKING_CLIENT_NAME}"
+                f"- Слот: {format_ru_datetime(slot_start)}"
             ),
-            reply_markup=build_master_manual_confirm_markup(),
+            reply_markup=build_master_manual_client_input_markup(),
         )
 
     def _handle_master_manual_confirm(self, *, telegram_user_id: int) -> CallbackHandleResult:
         service_type = self._state.get_context_value(telegram_user_id, "master_manual_service")
         slot_token = self._state.get_context_value(telegram_user_id, "master_manual_slot")
-        if service_type is None or slot_token is None:
+        client_name = self._state.get_context_value(telegram_user_id, "master_manual_client_name")
+        if service_type is None or slot_token is None or client_name is None:
             return self._stale_response(telegram_user_id=telegram_user_id)
 
         try:
@@ -1013,7 +1060,7 @@ class TelegramCallbackRouter:
         result = self._schedule.create_manual_booking(
             master_telegram_user_id=telegram_user_id,
             command=MasterManualBookingCommand(
-                client_name=_MANUAL_BOOKING_CLIENT_NAME,
+                client_name=client_name,
                 service_type=service_type,
                 slot_start=slot_start,
             ),
@@ -1023,7 +1070,8 @@ class TelegramCallbackRouter:
             f"{result.message}\n"
             f"Слот: {format_ru_slot_range(slot_start, duration_minutes=duration_minutes)} "
             f"({format_ru_datetime(slot_start)})\n"
-            f"Услуга: {SERVICE_OPTION_LABELS_RU.get(service_type, service_type)}"
+            f"Услуга: {SERVICE_OPTION_LABELS_RU.get(service_type, service_type)}\n"
+            f"Клиент: {client_name}"
         )
         self._state.set_menu(telegram_user_id, _MENU_MASTER, reset_context=True)
         return CallbackHandleResult(
@@ -1442,6 +1490,44 @@ def _as_datetime(value: datetime | str) -> datetime:
     return normalize_utc(parsed)
 
 
+def _as_str_or_none(value: object) -> str | None:
+    if isinstance(value, str):
+        return value
+    return None
+
+
+def _format_client_context(
+    *,
+    manual_client_name: str | None,
+    client_username: str | None,
+    client_phone: str | None,
+    fallback: str,
+) -> str:
+    if manual_client_name and manual_client_name.strip():
+        client = manual_client_name.strip()
+    elif client_username and client_username.strip():
+        client = f"@{client_username.strip().lstrip('@')}"
+    else:
+        client = fallback
+    if client_phone and client_phone.strip():
+        return f"Клиент: {client}; телефон: {client_phone.strip()}"
+    return f"Клиент: {client}"
+
+
+def _build_master_manual_confirmation_text(
+    *,
+    service_type: str,
+    slot_start: datetime,
+    client_name: str,
+) -> str:
+    return (
+        "Подтвердите ручную запись:\n"
+        f"- Услуга: {SERVICE_OPTION_LABELS_RU.get(service_type, service_type)}\n"
+        f"- Слот: {format_ru_datetime(slot_start)}\n"
+        f"- Клиент: {client_name}"
+    )
+
+
 def build_root_menu_markup() -> InlineKeyboardMarkup:
     return build_menu_markup(_MENU_ROOT)
 
@@ -1579,6 +1665,10 @@ def build_master_manual_confirm_markup() -> InlineKeyboardMarkup:
             *(_back_and_home_rows(action_back="mr")),
         ]
     )
+
+
+def build_master_manual_client_input_markup() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=_back_and_home_rows(action_back="mr"))
 
 
 def build_client_cancel_select_markup(bookings: list[dict[str, object]]) -> InlineKeyboardMarkup:

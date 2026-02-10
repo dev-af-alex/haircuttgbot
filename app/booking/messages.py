@@ -31,4 +31,6 @@ RU_BOOKING_MESSAGES = {
     "lunch_outside_work_hours": "Обеденный перерыв должен быть в пределах рабочего окна.",
     "manual_booking_created": "Ручная запись создана.",
     "manual_booking_conflict": "Слот для ручной записи недоступен.",
+    "manual_booking_client_required": "Укажите клиента для ручной записи.",
+    "manual_booking_client_too_long": "Слишком длинное имя клиента для ручной записи.",
 }

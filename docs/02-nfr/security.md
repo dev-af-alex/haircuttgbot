@@ -11,7 +11,7 @@ Mandatory gates (must exist in CI):
 - Assets: booking calendar integrity, role mapping (`Client`/`Master`), bot token, personal schedule data.
 - Threat actors: unauthorized Telegram users, compromised master account, malicious bot traffic/spam.
 - Primary threats: unauthorized schedule changes, fake bookings/cancellations, token leakage, PII leakage in logs.
-- Mitigations: RBAC checks by Telegram user ID, structured-log redaction policy for secret-like fields (`token/secret/password/authorization/api_key/database_url`) plus runtime token masking, and per-user command throttling on Telegram command paths.
+- Mitigations: RBAC checks by Telegram user ID, structured-log redaction policy for secret-like/sensitive fields (`token/secret/password/authorization/api_key/database_url/phone`) plus runtime token masking, and per-user command throttling on Telegram command paths.
 
 ## 2) Authentication and authorization
 
