@@ -17,6 +17,8 @@
 - Critical (availability/booking/schedule write paths):
   - p50 <= 300 ms
   - p95 <= 1200 ms
+- EPIC-024 targeted optimization paths (critical booking/schedule read hotspots):
+  - p95 <= 600 ms under documented local profiling contract in `docs/04-delivery/performance-check.md`
 - Non-critical (metrics/log-oriented endpoints and non-blocking flows):
   - p50 <= 500 ms
   - p95 <= 2000 ms

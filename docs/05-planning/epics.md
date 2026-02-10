@@ -254,7 +254,7 @@ Rules:
     - Local-run impact: compose runtime gains/remains background scheduler/worker path for reminder dispatch, with deterministic test hooks for time-based validation.
     - Delivered: reminder scheduling/dispatch worker with idempotent delivery semantics, reminder persistence contract + migration, observability outcomes for reminder lifecycle, regression coverage for >=2h/<2h boundaries and replay safety, and synchronized local/VM runbooks; merge gates satisfied with local pytest slice (`62 passed`) and docs/ADR sync.
 
-- EPIC-024 — Booking query performance optimization and DB indexing baseline — Status: TODO
+- EPIC-024 — Booking query performance optimization and DB indexing baseline — Status: DONE
     - Goal: reduce slow booking/schedule query paths (currently observed around 1200 ms) via indexing and query-plan optimization with measurable latency improvements.
     - Acceptance:
         - Critical booking/schedule read paths are profiled (`EXPLAIN ANALYZE` and application timing) and top slow queries are documented.
@@ -263,3 +263,4 @@ Rules:
         - Monitoring and smoke/perf-check docs include repeatable measurement steps and rollback-safe index migration notes.
     - Dependencies: EPIC-002, EPIC-004, EPIC-006, EPIC-007, EPIC-021.
     - Local-run impact: local validation adds repeatable perf-check commands/scenarios in addition to functional smoke, while keeping `docker compose up -d` workflow unchanged.
+    - Delivered: migration `20260210_0006` introduced booking/schedule/reminder/nickname hotspot indexes, booking/schedule active-status query alignment preserved behavior, perf harness/report added (`scripts/perf/profile_booking_queries.py`, `docs/05-planning/epics/EPIC-024/perf-report.md`) with targeted app-level p95 below `600 ms` in defined local synthetic profile; merge gates satisfied locally (pytest slice + compose smoke), intentional deviation: CI/SAST/dep/secrets checks not re-run in this local close step.

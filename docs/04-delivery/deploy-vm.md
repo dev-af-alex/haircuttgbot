@@ -199,6 +199,7 @@ docker compose --env-file /opt/haircuttgbot/shared/.env logs bot-api --tail=50 |
 ```
 
 Then run the canonical smoke path from `docs/04-delivery/local-dev.md` against VM services (bootstrap-only seed baseline + first-user auto-registration + booking/cancellation/schedule + bootstrap master add/remove scenario).
+For EPIC-024 performance validation, run the profiling contract from `docs/04-delivery/performance-check.md` against VM PostgreSQL and archive the generated report for release evidence.
 When Telegram token is configured, additionally validate button-first chat flows:
 - `Client`: `/start` from non-preseeded user shows greeting, auto-registers user (`Client` role), and opens `Меню клиента` directly; then new booking + cancel booking via buttons.
 - `Client` mixed-duration check: `Стрижка` shows 30-minute slot range labels (for example `10:00-10:30`), `Стрижка + борода` remains hourly (`10:00-11:00`).

@@ -229,7 +229,7 @@ class MasterScheduleService:
                 SELECT 1
                 FROM bookings
                 WHERE master_id = :master_id
-                  AND status = :active_status
+                  AND status = 'active'
                   AND slot_start < :end_at
                   AND :start_at < slot_end
                 LIMIT 1
@@ -237,7 +237,6 @@ class MasterScheduleService:
             ),
             {
                 "master_id": master_id,
-                "active_status": BOOKING_STATUS_ACTIVE,
                 "start_at": start_at,
                 "end_at": end_at,
             },
@@ -410,7 +409,7 @@ class MasterScheduleService:
                     SELECT 1
                     FROM bookings
                     WHERE master_id = :master_id
-                      AND status = :status
+                      AND status = 'active'
                       AND slot_start < :slot_end
                       AND :slot_start < slot_end
                     LIMIT 1
@@ -418,7 +417,6 @@ class MasterScheduleService:
                 ),
                 {
                     "master_id": context.master_id,
-                    "status": BOOKING_STATUS_ACTIVE,
                     "slot_start": slot_start,
                     "slot_end": slot_end,
                 },

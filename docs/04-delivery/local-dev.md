@@ -70,6 +70,9 @@ A developer can run:
    - Coverage must include mixed-duration booking behavior (30-minute and 60-minute service scenarios) via `tests/test_booking.py` and callback flow tests.
 9. Rehearse PostgreSQL backup/restore once per release candidate (or when schema changes):
    follow `docs/04-delivery/postgresql-backup-restore.md`
+10. For performance-sensitive releases (EPIC-024+), run query profiling contract:
+   `DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-haircuttgbot}:${POSTGRES_PASSWORD:-haircuttgbot}@127.0.0.1:5432/${POSTGRES_DB:-haircuttgbot} .venv/bin/python scripts/perf/profile_booking_queries.py --iterations 200`
+   and review `docs/05-planning/epics/EPIC-024/perf-report.md` against `docs/04-delivery/performance-check.md`.
 
 ## Optional real Telegram validation (polling mode)
 
@@ -144,3 +147,4 @@ Use this sequence when validating aiogram runtime against a real Telegram chat.
 - Do not commit secrets or real bot tokens.
 - Backup rehearsal commands and retention baseline are documented in `docs/04-delivery/postgresql-backup-restore.md`.
 - Alert thresholds and incident response notes are documented in `docs/04-delivery/alerts-baseline.md`.
+- Query-performance profiling procedure is documented in `docs/04-delivery/performance-check.md`.

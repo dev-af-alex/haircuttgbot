@@ -536,6 +536,35 @@ def test_create_booking_rejects_second_future_booking_for_client() -> None:
     assert "активная будущая" in result.message
 
 
+def test_create_booking_allows_if_client_future_booking_is_not_active() -> None:
+    engine = _setup_availability_schema()
+
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO bookings (master_id, client_user_id, service_type, status, slot_start, slot_end)
+                VALUES (1, 5001, 'beard', 'cancelled_by_client', :slot_start, :slot_end)
+                """
+            ),
+            {
+                "slot_start": datetime(2026, 2, 11, 12, 0, tzinfo=UTC),
+                "slot_end": datetime(2026, 2, 11, 13, 0, tzinfo=UTC),
+            },
+        )
+
+    service = BookingService(engine)
+    result = service.create_booking(
+        master_id=1,
+        client_user_id=5001,
+        service_type="haircut",
+        slot_start=datetime(2026, 2, 11, 16, 0, tzinfo=UTC),
+        now=datetime(2026, 2, 10, 10, 0, tzinfo=UTC),
+    )
+
+    assert result.created is True
+
+
 def test_create_booking_rejects_same_day_slot_inside_lead_window() -> None:
     engine = _setup_availability_schema()
     service = BookingService(engine)

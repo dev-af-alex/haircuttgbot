@@ -86,14 +86,13 @@ class BookingService:
                     SELECT 1
                     FROM bookings
                     WHERE client_user_id = :client_user_id
-                      AND status = :status
+                      AND status = 'active'
                       AND slot_start > :now_at
                     LIMIT 1
                     """
                 ),
                 {
                     "client_user_id": client_user_id,
-                    "status": BOOKING_STATUS_ACTIVE,
                     "now_at": now_utc,
                 },
             ).first()
@@ -106,7 +105,7 @@ class BookingService:
                     SELECT 1
                     FROM bookings
                     WHERE master_id = :master_id
-                      AND status = :status
+                      AND status = 'active'
                       AND slot_start < :slot_end
                       AND :slot_start < slot_end
                     LIMIT 1
@@ -114,7 +113,6 @@ class BookingService:
                 ),
                 {
                     "master_id": master_id,
-                    "status": BOOKING_STATUS_ACTIVE,
                     "slot_start": slot_start_utc,
                     "slot_end": slot_end_utc,
                 },
