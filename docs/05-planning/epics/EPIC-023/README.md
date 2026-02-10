@@ -1,6 +1,6 @@
 # EPIC-023 — Time-window reminder notifications (2 hours before appointment)
 
-Status: IN_PROGRESS
+Status: DONE
 Started: 2026-02-10
 Roadmap source: `docs/05-planning/epics.md`
 

@@ -243,7 +243,7 @@ Rules:
     - Local-run impact: smoke and Telegram validation steps extend to assert richer notification payloads and manual free-text client scenarios.
     - Delivered: notification context data model extension (manual client name + username/phone snapshots), enriched master/client notification texts with exact slot datetime, manual-booking free-text client input in Telegram callbacks, observability phone redaction update, and synchronized SSOT delivery docs with full regression/smoke coverage.
 
-- EPIC-023 — Time-window reminder notifications (2 hours before appointment) — Status: IN_PROGRESS
+- EPIC-023 — Time-window reminder notifications (2 hours before appointment) — Status: DONE
     - Goal: add proactive reminder notifications for clients exactly for appointments created more than 2 hours before slot start.
     - Acceptance:
         - System schedules and sends reminder to client 2 hours before appointment start in `BUSINESS_TIMEZONE`.
@@ -252,6 +252,7 @@ Rules:
         - Local regression/smoke covers positive reminder case and "no reminder when <2h lead time" case.
     - Dependencies: EPIC-007, EPIC-010, EPIC-021, EPIC-022.
     - Local-run impact: compose runtime gains/remains background scheduler/worker path for reminder dispatch, with deterministic test hooks for time-based validation.
+    - Delivered: reminder scheduling/dispatch worker with idempotent delivery semantics, reminder persistence contract + migration, observability outcomes for reminder lifecycle, regression coverage for >=2h/<2h boundaries and replay safety, and synchronized local/VM runbooks; merge gates satisfied with local pytest slice (`62 passed`) and docs/ADR sync.
 
 - EPIC-024 — Booking query performance optimization and DB indexing baseline — Status: TODO
     - Goal: reduce slow booking/schedule query paths (currently observed around 1200 ms) via indexing and query-plan optimization with measurable latency improvements.
