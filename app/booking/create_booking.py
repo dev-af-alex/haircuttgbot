@@ -162,7 +162,8 @@ class BookingService:
                     )
             except Exception:
                 # Some tests use reduced schemas without users table; snapshots are optional.
-                pass
+                client_username_snapshot = None
+                client_phone_snapshot = None
 
             booking_id = conn.execute(
                 text(
