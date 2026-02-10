@@ -318,7 +318,14 @@ def test_client_service_selection_controls_slot_granularity() -> None:
     assert all(not token.endswith("1000") for token in combo_tokens)
 
 
-def test_client_confirm_rejects_stale_same_day_slot_token() -> None:
+def test_client_confirm_rejects_stale_same_day_slot_token(monkeypatch) -> None:
+    class _FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 2, 9, 15, 0, tzinfo=UTC)
+
+    monkeypatch.setattr("app.booking.create_booking.datetime", _FixedDateTime)
+
     router = TelegramCallbackRouter(_setup_flow_schema())
     router.seed_root_menu(telegram_user_id=2000001)
 
