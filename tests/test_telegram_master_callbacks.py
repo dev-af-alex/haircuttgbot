@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
-from datetime import UTC, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
@@ -496,3 +496,52 @@ def test_bootstrap_master_rename_rejects_invalid_name_input() -> None:
     rejected = router.handle_text(telegram_user_id=1000001, text_value=" ")
     assert rejected is not None
     assert "некоррект" in rejected.text.lower()
+
+
+def test_master_manual_booking_date_pagination_supports_far_horizon_booking() -> None:
+    engine = _setup_flow_schema()
+    router = TelegramCallbackRouter(engine)
+    router.seed_root_menu(telegram_user_id=1000001)
+
+    router.handle(telegram_user_id=1000001, data="hb1|mm")
+    result = router.handle(telegram_user_id=1000001, data="hb1|msb")
+    service_callbacks = _callbacks_for_action(result.reply_markup, "mbs")
+    result = router.handle(telegram_user_id=1000001, data=service_callbacks[0])
+
+    page = 0
+    while page < 8:
+        page += 1
+        result = router.handle(telegram_user_id=1000001, data=f"hb1|mbp|p{page}")
+        assert "Выберите дату" in result.text
+
+    date_callbacks = _callbacks_for_action(result.reply_markup, "mbd")
+    assert date_callbacks
+    target_callback = date_callbacks[-1]
+    target_date = date.fromisoformat(f"{target_callback[-8:-4]}-{target_callback[-4:-2]}-{target_callback[-2:]}")
+    assert target_date >= datetime.now(UTC).date() + timedelta(days=55)
+
+    result = router.handle(telegram_user_id=1000001, data=target_callback)
+    slot_callbacks = _callbacks_for_action(result.reply_markup, "mbl")
+    assert slot_callbacks
+    result = router.handle(telegram_user_id=1000001, data=slot_callbacks[0])
+    assert "Введите клиента для ручной записи" in result.text
+
+    confirm_prompt = router.handle_text(telegram_user_id=1000001, text_value="Дальний клиент")
+    assert confirm_prompt is not None
+    assert "Подтвердите ручную запись" in confirm_prompt.text
+
+    result = router.handle(telegram_user_id=1000001, data="hb1|mbc")
+    assert "Ручная запись создана" in result.text
+
+
+def test_master_manual_booking_date_pagination_rejects_out_of_range_page_token() -> None:
+    router = TelegramCallbackRouter(_setup_flow_schema())
+    router.seed_root_menu(telegram_user_id=1000001)
+
+    router.handle(telegram_user_id=1000001, data="hb1|mm")
+    result = router.handle(telegram_user_id=1000001, data="hb1|msb")
+    service_callbacks = _callbacks_for_action(result.reply_markup, "mbs")
+    router.handle(telegram_user_id=1000001, data=service_callbacks[0])
+
+    invalid = router.handle(telegram_user_id=1000001, data="hb1|mbp|p99")
+    assert "Кнопка недействительна" in invalid.text

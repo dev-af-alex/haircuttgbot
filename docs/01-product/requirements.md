@@ -49,6 +49,7 @@ Write as “The system shall ...”
 - FR-023: The system shall include exact booking date/time in client notifications when booking is cancelled by a master.
 - FR-024: The system shall allow masters to provide arbitrary free-text client reference in manual booking flow and persist it for schedule/notification rendering.
 - FR-025: The system shall send a reminder notification to a client 2 hours before appointment start only when the booking was created at least 2 hours before that appointment.
+- FR-026: The system shall allow client and master manual booking date selection for any day in a rolling 2-month window, with paginated forward/back navigation instead of rendering all dates at once.
 
 ## 5) Non-goals (explicit exclusions)
 

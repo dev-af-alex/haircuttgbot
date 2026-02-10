@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from app.telegram.callbacks import build_client_date_markup, build_slot_markup
+from app.telegram.callbacks import BOOKING_DATE_HORIZON_DAYS, build_booking_date_markup, build_client_date_markup, build_slot_markup
 from app.telegram.presentation import chunk_inline_buttons, format_ru_datetime, format_ru_slot_range
 
 
@@ -71,3 +71,18 @@ def test_build_slot_markup_includes_range_labels() -> None:
     labels = _button_texts(markup)
     assert "10:00-10:30" in labels
     assert "11:00-12:00" in labels
+
+
+def test_build_booking_date_markup_supports_navigation_for_two_month_horizon() -> None:
+    markup = build_booking_date_markup(date_action="csd", page_action="cdp", page=0)
+    labels = _button_texts(markup)
+
+    assert "Вперед по датам" in labels
+    assert "Назад по датам" not in labels
+    assert any(label.count(".") == 2 for label in labels)
+
+    last_page = (BOOKING_DATE_HORIZON_DAYS - 1) // 7
+    markup_last = build_booking_date_markup(date_action="csd", page_action="cdp", page=last_page)
+    last_labels = _button_texts(markup_last)
+    assert "Вперед по датам" not in last_labels
+    assert "Назад по датам" in last_labels

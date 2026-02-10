@@ -8,6 +8,7 @@ Version: `hb1`
 `Client`:
 - Root menu -> `Клиент` -> client menu
 - Client menu -> `Новая запись` -> master -> service -> date -> slot -> confirm
+  - Date step uses paginated window (7 days per page, rolling 60-day horizon) with explicit `Назад по датам`/`Вперед по датам`.
 - Client menu -> `Отменить запись` -> booking -> confirm cancel
 
 `Master`:
@@ -16,6 +17,7 @@ Version: `hb1`
 - Master menu -> `Выходной день` -> date -> apply
 - Master menu -> `Обед` -> preset -> apply
 - Master menu -> `Ручная запись` -> service -> date -> slot -> confirm
+  - Date step uses the same paginated window and boundaries as client flow.
 - Master menu -> `Отмена записи` -> booking -> reason -> confirm
 
 Shared:
@@ -43,6 +45,7 @@ Actions (group-02, client flow):
 - `cb` -> start booking flow, show master list
 - `csm|<master_id>` -> select master and show service list
 - `css|<service_code>` -> select service and show date list
+- `cdp|p<index>` -> move client booking date page within 60-day horizon
 - `csd|<YYYYMMDD>` -> select date and show available slots
 - `csl|<YYYYMMDDHHMM>` -> select slot and open confirm step
 - `ccf` -> confirm booking
@@ -58,6 +61,7 @@ Actions (group-03, master flow):
 - `mls|<preset_code>` -> apply lunch preset
 - `msb` -> start manual booking flow
 - `mbs|<service_code>` -> select manual booking service
+- `mbp|p<index>` -> move master manual-booking date page within 60-day horizon
 - `mbd|<YYYYMMDD>` -> select manual booking date
 - `mbl|<YYYYMMDDHHMM>` -> select manual booking slot
 - `mbc` -> confirm manual booking
@@ -78,7 +82,9 @@ Backward compatibility strategy:
   - `Кнопка устарела. Откройте актуальное меню через /start.`
 - Stale events are logged as `telegram_callback_stale`.
 - Client flow context (`master_id`, `service_type`, `slot_token`) is required on dependent steps; missing context is treated as stale interaction.
+- Client date-page navigation rejects malformed or out-of-range page tokens via deterministic invalid-callback response.
 - Master flow context (manual booking / cancellation reason) is required on dependent steps; missing context is treated as stale interaction.
+- Master manual date-page navigation rejects malformed or out-of-range page tokens via deterministic invalid-callback response.
 
 ## Invalid action rules
 

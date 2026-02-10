@@ -94,6 +94,7 @@ Use this sequence when validating aiogram runtime against a real Telegram chat.
 5. Validate button-first client flow:
    - tap `Новая запись`;
    - choose master -> service -> date -> slot -> confirm;
+   - in date step validate pagination: `Вперед по датам` opens later dates, `Назад по датам` returns to earlier page; successful booking is possible on a far date (last page of 60-day horizon);
    - then tap `Отменить запись` and confirm cancel for created booking.
 6. Validate key rejection path in chat:
    - create one future booking;
@@ -113,6 +114,7 @@ Use this sequence when validating aiogram runtime against a real Telegram chat.
      - `Просмотр расписания` first asks for target date, then returns schedule for selected date;
      - `Выходной день` and `Обед` confirmations include readable interval/date details;
      - `Ручная запись` asks for free-text client value (любой текст), and confirmation/result include `Клиент` + readable `Слот` details;
+     - `Ручная запись` date step supports the same forward/back paginated navigation and allows selecting far dates in the 60-day window;
      - `Отмена записи` confirmations include readable `Слот` details and reason context.
    - verify informative notifications:
      - on client booking creation master notification includes client context (`@nickname`, and phone when present) plus exact slot date/time;

@@ -46,6 +46,8 @@ from app.telegram.presentation import (
 
 CALLBACK_DATA_MAX_LENGTH = 64
 CALLBACK_PREFIX = "hb1"
+BOOKING_DATE_HORIZON_DAYS = 60
+BOOKING_DATE_PAGE_SIZE = 7
 _MASTER_CANCEL_REASONS = {
     "busy": "Плотная загрузка мастера.",
     "sick": "Мастер заболел.",
@@ -69,6 +71,7 @@ _ALLOWED_ACTIONS = {
     "csm",
     "css",
     "csd",
+    "cdp",
     "csl",
     "ccf",
     "cci",
@@ -81,6 +84,7 @@ _ALLOWED_ACTIONS = {
     "msb",
     "mbs",
     "mbd",
+    "mbp",
     "mbl",
     "mbc",
     "msc",
@@ -98,6 +102,7 @@ _ALLOWED_ACTIONS = {
 _CONTEXT_PATTERN = re_compile(r"^[A-Za-z0-9_-]{1,32}$")
 _SLOT_TOKEN_PATTERN = re_compile(r"^\d{12}$")
 _DATE_TOKEN_PATTERN = re_compile(r"^\d{8}$")
+_PAGE_TOKEN_PATTERN = re_compile(r"^p\d{1,2}$")
 
 _ACTION_REQUIRED_COMMAND = {
     "cm": "client:book",
@@ -105,6 +110,7 @@ _ACTION_REQUIRED_COMMAND = {
     "csm": "client:book",
     "css": "client:book",
     "csd": "client:book",
+    "cdp": "client:book",
     "csl": "client:book",
     "ccf": "client:book",
     "cc": "client:cancel",
@@ -120,6 +126,7 @@ _ACTION_REQUIRED_COMMAND = {
     "msb": "master:schedule",
     "mbs": "master:schedule",
     "mbd": "master:schedule",
+    "mbp": "master:schedule",
     "mbl": "master:schedule",
     "mbc": "master:schedule",
     "msc": "master:schedule",
@@ -171,7 +178,7 @@ _MENU_ALLOWED_ACTIONS = {
     _MENU_MASTER: {"hm", "bk", "msv", "msd", "mlm", "msb", "msc", "mam"},
     _MENU_CLIENT_MASTER_SELECT: {"hm", "bk", "csm"},
     _MENU_CLIENT_SERVICE_SELECT: {"hm", "bk", "css"},
-    _MENU_CLIENT_DATE_SELECT: {"hm", "bk", "csd"},
+    _MENU_CLIENT_DATE_SELECT: {"hm", "bk", "csd", "cdp"},
     _MENU_CLIENT_SLOT_SELECT: {"hm", "bk", "csl"},
     _MENU_CLIENT_CONFIRM: {"hm", "bk", "ccf"},
     _MENU_CLIENT_CANCEL_SELECT: {"hm", "bk", "cci"},
@@ -180,7 +187,7 @@ _MENU_ALLOWED_ACTIONS = {
     _MENU_MASTER_DAY_OFF_SELECT: {"hm", "mr", "msu"},
     _MENU_MASTER_LUNCH_SELECT: {"hm", "mr", "mls"},
     _MENU_MASTER_MANUAL_SERVICE_SELECT: {"hm", "mr", "mbs"},
-    _MENU_MASTER_MANUAL_DATE_SELECT: {"hm", "mr", "mbd"},
+    _MENU_MASTER_MANUAL_DATE_SELECT: {"hm", "mr", "mbd", "mbp"},
     _MENU_MASTER_MANUAL_SLOT_SELECT: {"hm", "mr", "mbl"},
     _MENU_MASTER_MANUAL_CLIENT_INPUT: {"hm", "mr"},
     _MENU_MASTER_MANUAL_CONFIRM: {"hm", "mr", "mbc"},
@@ -432,6 +439,7 @@ class TelegramCallbackRouter:
             "cb": lambda user_id, _: self._handle_client_start_booking(telegram_user_id=user_id),
             "csm": self._handle_client_select_master,
             "css": self._handle_client_select_service,
+            "cdp": self._handle_client_date_page,
             "csd": self._handle_client_select_date,
             "csl": self._handle_client_select_slot,
             "ccf": lambda user_id, _: self._handle_client_confirm_booking(telegram_user_id=user_id),
@@ -445,6 +453,7 @@ class TelegramCallbackRouter:
             "mls": self._handle_master_lunch_apply,
             "msb": lambda user_id, _: self._handle_master_manual_start(telegram_user_id=user_id),
             "mbs": self._handle_master_manual_select_service,
+            "mbp": self._handle_master_manual_date_page,
             "mbd": self._handle_master_manual_select_date,
             "mbl": self._handle_master_manual_select_slot,
             "mbc": lambda user_id, _: self._handle_master_manual_confirm(telegram_user_id=user_id),
@@ -643,10 +652,40 @@ class TelegramCallbackRouter:
             return self._stale_response(telegram_user_id=telegram_user_id)
 
         self._state.set_context_value(telegram_user_id, "service_type", context)
+        self._state.set_context_value(telegram_user_id, "client_date_page", "0")
         self._state.set_menu(telegram_user_id, _MENU_CLIENT_DATE_SELECT)
         return CallbackHandleResult(
             text="Выберите дату для записи.",
-            reply_markup=build_client_date_markup(action="csd"),
+            reply_markup=build_booking_date_markup(
+                date_action="csd",
+                page_action="cdp",
+                page=0,
+            ),
+        )
+
+    def _handle_client_date_page(self, telegram_user_id: int, context: str | None) -> CallbackHandleResult:
+        if context is None or not _PAGE_TOKEN_PATTERN.match(context):
+            return self._invalid_response(telegram_user_id=telegram_user_id)
+        if self._state.get_context_value(telegram_user_id, "master_id") is None:
+            return self._stale_response(telegram_user_id=telegram_user_id)
+        if self._state.get_context_value(telegram_user_id, "service_type") is None:
+            return self._stale_response(telegram_user_id=telegram_user_id)
+        try:
+            page = _parse_page_token(context)
+        except ValueError:
+            return self._invalid_response(telegram_user_id=telegram_user_id)
+        max_page = _booking_max_page_index()
+        if page < 0 or page > max_page:
+            return self._invalid_response(telegram_user_id=telegram_user_id)
+        self._state.set_context_value(telegram_user_id, "client_date_page", str(page))
+        self._state.set_menu(telegram_user_id, _MENU_CLIENT_DATE_SELECT)
+        return CallbackHandleResult(
+            text="Выберите дату для записи.",
+            reply_markup=build_booking_date_markup(
+                date_action="csd",
+                page_action="cdp",
+                page=page,
+            ),
         )
 
     def _handle_client_select_date(self, telegram_user_id: int, context: str | None) -> CallbackHandleResult:
@@ -661,6 +700,10 @@ class TelegramCallbackRouter:
             on_date = _parse_date_token(context)
         except ValueError:
             return self._invalid_response(telegram_user_id=telegram_user_id)
+        if not _is_date_in_booking_horizon(on_date):
+            return self._invalid_response(telegram_user_id=telegram_user_id)
+
+        self._state.set_context_value(telegram_user_id, "client_date_page", str(_booking_page_for_date(on_date)))
 
         response = self._flow.select_service(master_id=master_id, on_date=on_date, service_type=service_type)
         slots = response.get("slots", [])
@@ -668,7 +711,11 @@ class TelegramCallbackRouter:
             self._state.set_menu(telegram_user_id, _MENU_CLIENT_DATE_SELECT)
             return CallbackHandleResult(
                 text=f"{response.get('message', 'Выберите доступный слот.')}\nНа выбранную дату свободных слотов нет.",
-                reply_markup=build_client_date_markup(action="csd"),
+                reply_markup=build_booking_date_markup(
+                    date_action="csd",
+                    page_action="cdp",
+                    page=_booking_page_for_date(on_date),
+                ),
             )
 
         self._state.set_menu(telegram_user_id, _MENU_CLIENT_SLOT_SELECT)
@@ -983,10 +1030,40 @@ class TelegramCallbackRouter:
         if context is None or context not in SERVICE_OPTION_LABELS_RU:
             return self._invalid_response(telegram_user_id=telegram_user_id)
         self._state.set_context_value(telegram_user_id, "master_manual_service", context)
+        self._state.set_context_value(telegram_user_id, "master_manual_date_page", "0")
         self._state.set_menu(telegram_user_id, _MENU_MASTER_MANUAL_DATE_SELECT)
         return CallbackHandleResult(
             text="Выберите дату для ручной записи.",
-            reply_markup=build_client_date_markup(action="mbd"),
+            reply_markup=build_booking_date_markup(
+                date_action="mbd",
+                page_action="mbp",
+                page=0,
+                action_back="mr",
+            ),
+        )
+
+    def _handle_master_manual_date_page(self, telegram_user_id: int, context: str | None) -> CallbackHandleResult:
+        if context is None or not _PAGE_TOKEN_PATTERN.match(context):
+            return self._invalid_response(telegram_user_id=telegram_user_id)
+        if self._state.get_context_value(telegram_user_id, "master_manual_service") is None:
+            return self._stale_response(telegram_user_id=telegram_user_id)
+        try:
+            page = _parse_page_token(context)
+        except ValueError:
+            return self._invalid_response(telegram_user_id=telegram_user_id)
+        max_page = _booking_max_page_index()
+        if page < 0 or page > max_page:
+            return self._invalid_response(telegram_user_id=telegram_user_id)
+        self._state.set_context_value(telegram_user_id, "master_manual_date_page", str(page))
+        self._state.set_menu(telegram_user_id, _MENU_MASTER_MANUAL_DATE_SELECT)
+        return CallbackHandleResult(
+            text="Выберите дату для ручной записи.",
+            reply_markup=build_booking_date_markup(
+                date_action="mbd",
+                page_action="mbp",
+                page=page,
+                action_back="mr",
+            ),
         )
 
     def _handle_master_manual_select_date(self, telegram_user_id: int, context: str | None) -> CallbackHandleResult:
@@ -999,6 +1076,9 @@ class TelegramCallbackRouter:
             on_date = _parse_date_token(context)
         except ValueError:
             return self._invalid_response(telegram_user_id=telegram_user_id)
+        if not _is_date_in_booking_horizon(on_date):
+            return self._invalid_response(telegram_user_id=telegram_user_id)
+        self._state.set_context_value(telegram_user_id, "master_manual_date_page", str(_booking_page_for_date(on_date)))
 
         master_ctx = self._schedule.resolve_context(master_telegram_user_id=telegram_user_id)
         if master_ctx is None:
@@ -1016,7 +1096,12 @@ class TelegramCallbackRouter:
             self._state.set_menu(telegram_user_id, _MENU_MASTER_MANUAL_DATE_SELECT)
             return CallbackHandleResult(
                 text="На выбранную дату свободных слотов нет.",
-                reply_markup=build_client_date_markup(action="mbd"),
+                reply_markup=build_booking_date_markup(
+                    date_action="mbd",
+                    page_action="mbp",
+                    page=_booking_page_for_date(on_date),
+                    action_back="mr",
+                ),
             )
 
         self._state.set_menu(telegram_user_id, _MENU_MASTER_MANUAL_SLOT_SELECT)
@@ -1483,6 +1568,42 @@ def _parse_date_token(token: str) -> date:
     return datetime.strptime(token, "%Y%m%d").date()
 
 
+def _parse_page_token(token: str) -> int:
+    if not _PAGE_TOKEN_PATTERN.match(token):
+        raise ValueError("Invalid page token")
+    return int(token[1:])
+
+
+def _format_page_token(page: int) -> str:
+    if page < 0:
+        raise ValueError("Page index must be non-negative")
+    return f"p{page}"
+
+
+def _booking_date_horizon(*, today: date | None = None) -> tuple[date, date]:
+    start = today or business_now().date()
+    end = start + timedelta(days=BOOKING_DATE_HORIZON_DAYS - 1)
+    return start, end
+
+
+def _booking_page_for_date(on_date: date, *, today: date | None = None) -> int:
+    start, end = _booking_date_horizon(today=today)
+    if on_date < start:
+        return 0
+    if on_date > end:
+        return _booking_max_page_index()
+    return (on_date - start).days // BOOKING_DATE_PAGE_SIZE
+
+
+def _booking_max_page_index() -> int:
+    return (BOOKING_DATE_HORIZON_DAYS - 1) // BOOKING_DATE_PAGE_SIZE
+
+
+def _is_date_in_booking_horizon(on_date: date, *, today: date | None = None) -> bool:
+    start, end = _booking_date_horizon(today=today)
+    return start <= on_date <= end
+
+
 def _as_datetime(value: datetime | str) -> datetime:
     if isinstance(value, datetime):
         return normalize_utc(value)
@@ -1605,6 +1726,53 @@ def build_master_service_markup() -> InlineKeyboardMarkup:
     buttons = _service_buttons(service_options=list_service_options(), action="mbs")
     rows = chunk_inline_buttons(buttons, max_per_row=MOBILE_MENU_MAX_BUTTONS_PER_ROW)
     rows.extend(_back_and_home_rows(action_back="mr"))
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def build_booking_date_markup(
+    *,
+    date_action: str,
+    page_action: str,
+    page: int = 0,
+    action_back: str = "bk",
+) -> InlineKeyboardMarkup:
+    today = business_now().date()
+    start_date, _ = _booking_date_horizon(today=today)
+    max_page = _booking_max_page_index()
+    current_page = min(max(page, 0), max_page)
+    start_index = current_page * BOOKING_DATE_PAGE_SIZE
+    end_index = min(start_index + BOOKING_DATE_PAGE_SIZE, BOOKING_DATE_HORIZON_DAYS)
+
+    buttons: list[InlineKeyboardButton] = []
+    for offset in range(start_index, end_index):
+        day = start_date + timedelta(days=offset)
+        token = day.strftime("%Y%m%d")
+        buttons.append(
+            InlineKeyboardButton(
+                text=format_ru_date(day),
+                callback_data=encode_callback_data(action=date_action, context=token),
+            )
+        )
+
+    rows = chunk_inline_buttons(buttons, max_per_row=MOBILE_DATE_SLOT_MAX_BUTTONS_PER_ROW)
+    navigation_buttons: list[InlineKeyboardButton] = []
+    if current_page > 0:
+        navigation_buttons.append(
+            InlineKeyboardButton(
+                text="Назад по датам",
+                callback_data=encode_callback_data(action=page_action, context=_format_page_token(current_page - 1)),
+            )
+        )
+    if current_page < max_page:
+        navigation_buttons.append(
+            InlineKeyboardButton(
+                text="Вперед по датам",
+                callback_data=encode_callback_data(action=page_action, context=_format_page_token(current_page + 1)),
+            )
+        )
+    if navigation_buttons:
+        rows.extend(chunk_inline_buttons(navigation_buttons, max_per_row=MOBILE_MENU_MAX_BUTTONS_PER_ROW))
+    rows.extend(_back_and_home_rows(action_back=action_back))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

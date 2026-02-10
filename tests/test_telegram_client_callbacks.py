@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from datetime import UTC
 
 from sqlalchemy import create_engine, text
@@ -390,3 +390,57 @@ def test_client_interactive_keyboards_keep_mobile_friendly_rows() -> None:
     service_row_sizes = [len(row) for row in result.reply_markup.inline_keyboard[:-2]]
     assert service_row_sizes
     assert max(service_row_sizes) <= 2
+
+
+def test_client_booking_date_pagination_supports_far_horizon_booking() -> None:
+    router = TelegramCallbackRouter(_setup_flow_schema())
+    router.seed_root_menu(telegram_user_id=2000001)
+
+    router.handle(telegram_user_id=2000001, data="hb1|cm")
+    result = router.handle(telegram_user_id=2000001, data="hb1|cb")
+    master_callbacks = _callbacks_for_action(result.reply_markup, "csm")
+    result = router.handle(telegram_user_id=2000001, data=master_callbacks[0])
+    service_callbacks = _callbacks_for_action(result.reply_markup, "css")
+    result = router.handle(telegram_user_id=2000001, data=service_callbacks[0])
+
+    page = 0
+    while page < 8:
+        page += 1
+        result = router.handle(telegram_user_id=2000001, data=f"hb1|cdp|p{page}")
+        labels = [button.text for row in result.reply_markup.inline_keyboard for button in row]
+        assert "Выберите дату" in result.text
+        if page == 8:
+            assert "Вперед по датам" not in labels
+            assert "Назад по датам" in labels
+
+    date_callbacks = _callbacks_for_action(result.reply_markup, "csd")
+    assert date_callbacks
+    selected_callback = date_callbacks[-1]
+    selected_date = date.fromisoformat(
+        f"{selected_callback[-8:-4]}-{selected_callback[-4:-2]}-{selected_callback[-2:]}"
+    )
+    assert selected_date >= datetime.now(UTC).date() + timedelta(days=55)
+
+    result = router.handle(telegram_user_id=2000001, data=selected_callback)
+    slot_callbacks = _callbacks_for_action(result.reply_markup, "csl")
+    assert slot_callbacks
+
+    result = router.handle(telegram_user_id=2000001, data=slot_callbacks[0])
+    assert "Подтвердите запись" in result.text
+    result = router.handle(telegram_user_id=2000001, data="hb1|ccf")
+    assert "успешно создана" in result.text
+
+
+def test_client_booking_date_pagination_rejects_out_of_range_page_token() -> None:
+    router = TelegramCallbackRouter(_setup_flow_schema())
+    router.seed_root_menu(telegram_user_id=2000001)
+
+    router.handle(telegram_user_id=2000001, data="hb1|cm")
+    result = router.handle(telegram_user_id=2000001, data="hb1|cb")
+    master_callbacks = _callbacks_for_action(result.reply_markup, "csm")
+    result = router.handle(telegram_user_id=2000001, data=master_callbacks[0])
+    service_callbacks = _callbacks_for_action(result.reply_markup, "css")
+    router.handle(telegram_user_id=2000001, data=service_callbacks[0])
+
+    invalid = router.handle(telegram_user_id=2000001, data="hb1|cdp|p99")
+    assert "Кнопка недействительна" in invalid.text
