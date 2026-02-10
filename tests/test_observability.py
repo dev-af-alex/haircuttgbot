@@ -40,6 +40,8 @@ def _setup_booking_schema() -> Engine:
                     id INTEGER PRIMARY KEY,
                     master_id INTEGER NOT NULL,
                     client_user_id INTEGER,
+                    organizer_user_id INTEGER,
+                    booking_group_key TEXT,
                     service_type TEXT,
                     status TEXT NOT NULL,
                     cancellation_reason TEXT,

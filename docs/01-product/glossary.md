@@ -13,6 +13,8 @@
 - Localization — language configuration for user-facing bot messages (Russian in MVP).
 - Cancellation reason — mandatory explanation provided by a master when canceling a client booking.
 - Availability calendar — computed schedule view that excludes occupied slots, day-off periods, and lunch break.
+- Grouped booking — one client-initiated booking request that contains multiple participant appointments.
+- Grouped booking participant — one person inside a grouped booking, identified by organizer-provided name and managed (including cancellation) independently from other participants.
 
 Rules:
 

@@ -96,6 +96,7 @@ Use this sequence when validating aiogram runtime against a real Telegram chat.
    - choose master -> service -> date -> slot -> confirm;
    - in date step validate pagination: `Вперед по датам` opens later dates, `Назад по датам` returns to earlier page; successful booking is possible on a far date (last page of 60-day horizon);
    - then tap `Отменить запись` and confirm cancel for created booking.
+   - validate grouped flow: tap `Групповая запись`, add at least two participants by name, assign them independently (different master and/or date), finish group, then cancel one participant through `Отменить запись` (participant-level cancel only).
 6. Validate key rejection path in chat:
    - create one future booking;
    - start a second booking attempt through buttons and confirm bot returns one-active-booking rejection.

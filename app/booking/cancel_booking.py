@@ -23,6 +23,7 @@ class BookingCancelResult:
     booking_id: int | None = None
     master_id: int | None = None
     client_user_id: int | None = None
+    organizer_user_id: int | None = None
     cancellation_reason: str | None = None
     slot_start: datetime | None = None
 
@@ -41,20 +42,36 @@ class BookingCancellationService:
         now_utc = _to_utc(now) if now is not None else utc_now()
 
         with self._engine.begin() as conn:
-            booking = conn.execute(
-                text(
-                    """
-                    SELECT id, master_id, status, slot_start
-                    FROM bookings
-                    WHERE id = :booking_id
-                      AND client_user_id = :client_user_id
-                    """
-                ),
-                {
-                    "booking_id": booking_id,
-                    "client_user_id": client_user_id,
-                },
-            ).mappings().first()
+            try:
+                booking = conn.execute(
+                    text(
+                        """
+                        SELECT id, master_id, client_user_id, organizer_user_id, status, slot_start
+                        FROM bookings
+                        WHERE id = :booking_id
+                          AND (client_user_id = :client_user_id OR organizer_user_id = :client_user_id)
+                        """
+                    ),
+                    {
+                        "booking_id": booking_id,
+                        "client_user_id": client_user_id,
+                    },
+                ).mappings().first()
+            except Exception:
+                booking = conn.execute(
+                    text(
+                        """
+                        SELECT id, master_id, client_user_id, status, slot_start
+                        FROM bookings
+                        WHERE id = :booking_id
+                          AND client_user_id = :client_user_id
+                        """
+                    ),
+                    {
+                        "booking_id": booking_id,
+                        "client_user_id": client_user_id,
+                    },
+                ).mappings().first()
             if booking is None:
                 return BookingCancelResult(cancelled=False, message=RU_BOOKING_MESSAGES["cancel_not_allowed"])
 
@@ -94,7 +111,12 @@ class BookingCancellationService:
                 message=RU_BOOKING_MESSAGES["cancelled"],
                 booking_id=int(booking["id"]),
                 master_id=int(booking["master_id"]),
-                client_user_id=client_user_id,
+                client_user_id=int(booking["client_user_id"]) if booking["client_user_id"] is not None else None,
+                organizer_user_id=(
+                    int(booking["organizer_user_id"])
+                    if "organizer_user_id" in booking and booking["organizer_user_id"] is not None
+                    else None
+                ),
                 slot_start=slot_start,
             )
 
@@ -113,21 +135,38 @@ class BookingCancellationService:
             return BookingCancelResult(cancelled=False, message=RU_BOOKING_MESSAGES["cancel_reason_required"])
 
         with self._engine.begin() as conn:
-            booking = conn.execute(
-                text(
-                    """
-                    SELECT b.id, b.master_id, b.client_user_id, b.status, b.slot_start
-                    FROM bookings b
-                    JOIN masters m ON m.id = b.master_id
-                    WHERE b.id = :booking_id
-                      AND m.user_id = :master_user_id
-                    """
-                ),
-                {
-                    "booking_id": booking_id,
-                    "master_user_id": master_user_id,
-                },
-            ).mappings().first()
+            try:
+                booking = conn.execute(
+                    text(
+                        """
+                        SELECT b.id, b.master_id, b.client_user_id, b.organizer_user_id, b.status, b.slot_start
+                        FROM bookings b
+                        JOIN masters m ON m.id = b.master_id
+                        WHERE b.id = :booking_id
+                          AND m.user_id = :master_user_id
+                        """
+                    ),
+                    {
+                        "booking_id": booking_id,
+                        "master_user_id": master_user_id,
+                    },
+                ).mappings().first()
+            except Exception:
+                booking = conn.execute(
+                    text(
+                        """
+                        SELECT b.id, b.master_id, b.client_user_id, b.status, b.slot_start
+                        FROM bookings b
+                        JOIN masters m ON m.id = b.master_id
+                        WHERE b.id = :booking_id
+                          AND m.user_id = :master_user_id
+                        """
+                    ),
+                    {
+                        "booking_id": booking_id,
+                        "master_user_id": master_user_id,
+                    },
+                ).mappings().first()
             if booking is None:
                 return BookingCancelResult(cancelled=False, message=RU_BOOKING_MESSAGES["cancel_not_allowed"])
 
@@ -168,7 +207,12 @@ class BookingCancellationService:
                 message=RU_BOOKING_MESSAGES["cancelled"],
                 booking_id=int(booking["id"]),
                 master_id=int(booking["master_id"]),
-                client_user_id=int(booking["client_user_id"]),
+                client_user_id=int(booking["client_user_id"]) if booking["client_user_id"] is not None else None,
+                organizer_user_id=(
+                    int(booking["organizer_user_id"])
+                    if "organizer_user_id" in booking and booking["organizer_user_id"] is not None
+                    else None
+                ),
                 cancellation_reason=normalized_reason,
                 slot_start=slot_start,
             )

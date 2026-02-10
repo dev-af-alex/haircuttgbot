@@ -151,6 +151,8 @@ Telegram command contract baseline:
   - Idempotency notes:
     - Successful cancellation responses are replayed for duplicate deliveries in replay window.
     - Replay response includes header `X-Idempotency-Replayed: 1`.
+  - Grouped-booking note (EPIC-026):
+    - For grouped participant bookings, cancellation ownership additionally allows organizer ownership path (`organizer_user_id`) and remains participant-level (one booking per cancel action).
 
 - `POST /internal/telegram/master/booking-flow/cancel`
   - Purpose: cancel master-owned active future booking with mandatory reason and participant notifications.

@@ -209,6 +209,175 @@ class BookingService:
                 booking_id=int(booking_id),
             )
 
+    def create_grouped_participant_booking(
+        self,
+        *,
+        master_id: int,
+        organizer_user_id: int,
+        service_type: str,
+        slot_start: datetime,
+        participant_name: str,
+        booking_group_key: str,
+        now: datetime | None = None,
+    ) -> BookingCreateResult:
+        slot_start_utc = _to_utc(slot_start)
+        now_utc = _to_utc(now) if now is not None else utc_now()
+        normalized_name = participant_name.strip()
+        if not normalized_name:
+            return BookingCreateResult(created=False, message=RU_BOOKING_MESSAGES["manual_booking_client_required"])
+        if len(normalized_name) > 160:
+            return BookingCreateResult(created=False, message=RU_BOOKING_MESSAGES["manual_booking_client_too_long"])
+
+        with self._engine.begin() as conn:
+            duration_minutes = resolve_service_duration_minutes(service_type, connection=conn)
+            if duration_minutes is None:
+                return BookingCreateResult(created=False, message=RU_BOOKING_MESSAGES["invalid_service_type"])
+
+            slot_end_utc = slot_start_utc + timedelta(minutes=duration_minutes)
+            master = conn.execute(
+                text(
+                    """
+                    SELECT work_start, work_end, lunch_start, lunch_end
+                    FROM masters
+                    WHERE id = :master_id AND is_active = true
+                    """
+                ),
+                {"master_id": master_id},
+            ).mappings().first()
+            if master is None:
+                return BookingCreateResult(created=False, message=RU_BOOKING_MESSAGES["master_not_found"])
+
+            work_start = _as_time(master["work_start"])
+            work_end = _as_time(master["work_end"])
+            lunch_start = _as_time(master["lunch_start"])
+            lunch_end = _as_time(master["lunch_end"])
+            business_slot_date = business_date(slot_start_utc)
+            day_work_start = combine_business_date_time(business_slot_date, work_start)
+            day_work_end = combine_business_date_time(business_slot_date, work_end)
+            day_lunch_start = combine_business_date_time(business_slot_date, lunch_start)
+            day_lunch_end = combine_business_date_time(business_slot_date, lunch_end)
+
+            if not is_slot_start_allowed(
+                slot_start=slot_start_utc,
+                now=now_utc,
+                slot_step_minutes=DEFAULT_SLOT_STEP_MINUTES,
+            ):
+                return BookingCreateResult(created=False, message=RU_BOOKING_MESSAGES["slot_already_passed"])
+            if slot_start_utc < day_work_start or slot_end_utc > day_work_end:
+                return BookingCreateResult(created=False, message=RU_BOOKING_MESSAGES["slot_not_available"])
+            if slot_start_utc < day_lunch_end and day_lunch_start < slot_end_utc:
+                return BookingCreateResult(created=False, message=RU_BOOKING_MESSAGES["slot_not_available"])
+
+            overlaps = conn.execute(
+                text(
+                    """
+                    SELECT 1
+                    FROM bookings
+                    WHERE master_id = :master_id
+                      AND status = 'active'
+                      AND slot_start < :slot_end
+                      AND :slot_start < slot_end
+                    LIMIT 1
+                    """
+                ),
+                {
+                    "master_id": master_id,
+                    "slot_start": slot_start_utc,
+                    "slot_end": slot_end_utc,
+                },
+            ).first()
+            if overlaps is not None:
+                return BookingCreateResult(created=False, message=RU_BOOKING_MESSAGES["slot_not_available"])
+
+            blocked = conn.execute(
+                text(
+                    """
+                    SELECT 1
+                    FROM availability_blocks
+                    WHERE master_id = :master_id
+                      AND start_at < :slot_end
+                      AND :slot_start < end_at
+                    LIMIT 1
+                    """
+                ),
+                {
+                    "master_id": master_id,
+                    "slot_start": slot_start_utc,
+                    "slot_end": slot_end_utc,
+                },
+            ).first()
+            if blocked is not None:
+                return BookingCreateResult(created=False, message=RU_BOOKING_MESSAGES["slot_not_available"])
+
+            organizer_snapshot = conn.execute(
+                text(
+                    """
+                    SELECT telegram_username, phone_number
+                    FROM users
+                    WHERE id = :organizer_user_id
+                    """
+                ),
+                {"organizer_user_id": organizer_user_id},
+            ).mappings().first()
+            organizer_username = (
+                str(organizer_snapshot["telegram_username"])
+                if organizer_snapshot is not None and organizer_snapshot["telegram_username"] is not None
+                else None
+            )
+            organizer_phone = (
+                str(organizer_snapshot["phone_number"])
+                if organizer_snapshot is not None and organizer_snapshot["phone_number"] is not None
+                else None
+            )
+
+            booking_id = conn.execute(
+                text(
+                    """
+                    INSERT INTO bookings (
+                        master_id,
+                        client_user_id,
+                        organizer_user_id,
+                        booking_group_key,
+                        service_type,
+                        slot_start,
+                        slot_end,
+                        status,
+                        manual_client_name,
+                        client_username_snapshot,
+                        client_phone_snapshot
+                    )
+                    VALUES (
+                        :master_id,
+                        NULL,
+                        :organizer_user_id,
+                        :booking_group_key,
+                        :service_type,
+                        :slot_start,
+                        :slot_end,
+                        :status,
+                        :manual_client_name,
+                        :client_username_snapshot,
+                        :client_phone_snapshot
+                    )
+                    RETURNING id
+                    """
+                ),
+                {
+                    "master_id": master_id,
+                    "organizer_user_id": organizer_user_id,
+                    "booking_group_key": booking_group_key,
+                    "service_type": service_type,
+                    "slot_start": slot_start_utc,
+                    "slot_end": slot_end_utc,
+                    "status": BOOKING_STATUS_ACTIVE,
+                    "manual_client_name": normalized_name,
+                    "client_username_snapshot": organizer_username,
+                    "client_phone_snapshot": organizer_phone,
+                },
+            ).scalar_one()
+
+            return BookingCreateResult(created=True, message=RU_BOOKING_MESSAGES["created"], booking_id=int(booking_id))
+
 
 def _to_utc(value: datetime) -> datetime:
     return normalize_utc(value)

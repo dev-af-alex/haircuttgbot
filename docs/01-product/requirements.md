@@ -50,6 +50,10 @@ Write as “The system shall ...”
 - FR-024: The system shall allow masters to provide arbitrary free-text client reference in manual booking flow and persist it for schedule/notification rendering.
 - FR-025: The system shall send a reminder notification to a client 2 hours before appointment start only when the booking was created at least 2 hours before that appointment.
 - FR-026: The system shall allow client and master manual booking date selection for any day in a rolling 2-month window, with paginated forward/back navigation instead of rendering all dates at once.
+- FR-027: The system shall allow one client to create a grouped booking request for multiple people, where each participant has explicit client-provided name identification.
+- FR-028: The system shall allow grouped booking participants to be assigned independently without same-master or same-day restrictions inside one grouped request.
+- FR-029: The system shall support participant-level cancellation for grouped bookings.
+- FR-030: The system shall keep `FR-017` unchanged for organizer-level booking ownership (no relaxation of one active future booking policy for organizer identity).
 
 ## 5) Non-goals (explicit exclusions)
 

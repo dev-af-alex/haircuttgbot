@@ -341,6 +341,73 @@ class TelegramBookingFlowService:
             ],
         }
 
+    def confirm_group_participant(
+        self,
+        *,
+        client_telegram_user_id: int,
+        master_id: int,
+        service_type: str,
+        slot_start: datetime,
+        participant_name: str,
+        booking_group_key: str,
+    ) -> dict[str, object]:
+        organizer_user_id = self._repository.resolve_client_user_id(client_telegram_user_id)
+        if organizer_user_id is None:
+            return {
+                "created": False,
+                "booking_id": None,
+                "message": RU_BOOKING_MESSAGES["client_not_found"],
+                "notifications": [],
+            }
+
+        result = self._bookings.create_grouped_participant_booking(
+            master_id=master_id,
+            organizer_user_id=organizer_user_id,
+            service_type=service_type,
+            slot_start=slot_start,
+            participant_name=participant_name,
+            booking_group_key=booking_group_key,
+        )
+        if not result.created:
+            return {
+                "created": False,
+                "booking_id": None,
+                "message": result.message,
+                "notifications": [],
+            }
+
+        result_context = (
+            self._repository.get_booking_notification_context(result.booking_id)
+            if result.booking_id is not None
+            else None
+        )
+        master_telegram_user_id = self._repository.get_master_telegram_user_id(master_id)
+        notifications = (
+            self._notifications.build_booking_confirmation(
+                client_telegram_user_id=client_telegram_user_id,
+                master_telegram_user_id=master_telegram_user_id,
+                slot_start=_as_datetime_or_none(result_context.get("slot_start") if result_context else None),
+                service_type=_as_str_or_none(result_context.get("service_type") if result_context else None),
+                manual_client_name=_as_str_or_none(result_context.get("manual_client_name") if result_context else None),
+                client_username=_as_str_or_none(result_context.get("client_username") if result_context else None),
+                client_phone=_as_str_or_none(result_context.get("client_phone") if result_context else None),
+            )
+            if master_telegram_user_id is not None
+            else []
+        )
+        return {
+            "created": True,
+            "booking_id": result.booking_id,
+            "message": result.message,
+            "notifications": [
+                {
+                    "recipient_telegram_user_id": n.recipient_telegram_user_id,
+                    "message": n.message,
+                }
+                for n in notifications
+            ],
+        }
+
     def cancel(
         self,
         *,
@@ -427,8 +494,9 @@ class TelegramBookingFlowService:
                 message=RU_BOOKING_MESSAGES["booking_cancelled_by_master_master"],
             )
         ]
-        if result.client_user_id is not None and result.cancellation_reason is not None:
-            client_telegram_user_id = self._repository.get_client_telegram_user_id(result.client_user_id)
+        recipient_user_id = result.client_user_id or result.organizer_user_id
+        if recipient_user_id is not None and result.cancellation_reason is not None:
+            client_telegram_user_id = self._repository.get_client_telegram_user_id(recipient_user_id)
             if client_telegram_user_id is not None:
                 notifications = self._notifications.build_master_cancellation(
                     client_telegram_user_id=client_telegram_user_id,

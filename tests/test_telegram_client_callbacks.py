@@ -54,6 +54,8 @@ def _setup_flow_schema() -> Engine:
                     id INTEGER PRIMARY KEY,
                     master_id INTEGER NOT NULL,
                     client_user_id INTEGER,
+                    organizer_user_id INTEGER,
+                    booking_group_key TEXT,
                     service_type TEXT,
                     status TEXT NOT NULL,
                     cancellation_reason TEXT,
@@ -444,3 +446,110 @@ def test_client_booking_date_pagination_rejects_out_of_range_page_token() -> Non
 
     invalid = router.handle(telegram_user_id=2000001, data="hb1|cdp|p99")
     assert "Кнопка недействительна" in invalid.text
+
+
+def test_client_grouped_booking_allows_multiple_participants_across_masters_and_days() -> None:
+    engine = _setup_flow_schema()
+    with engine.begin() as conn:
+        conn.execute(text("INSERT INTO users (id, telegram_user_id, telegram_username, role_id) VALUES (30, 1000002, 'm2', 2)"))
+        conn.execute(
+            text(
+                """
+                INSERT INTO masters (id, user_id, display_name, is_active, work_start, work_end, lunch_start, lunch_end)
+                VALUES (2, 30, 'Master Demo 2', 1, '10:00:00', '21:00:00', '13:00:00', '14:00:00')
+                """
+            )
+        )
+
+    router = TelegramCallbackRouter(engine)
+    router.seed_root_menu(telegram_user_id=2000001)
+
+    router.handle(telegram_user_id=2000001, data="hb1|cm")
+    result = router.handle(telegram_user_id=2000001, data="hb1|cg")
+    assert "Введите имя участника" in result.text
+
+    result = router.handle_text(telegram_user_id=2000001, text_value="Иван")
+    assert result is not None
+    master_callbacks = _callbacks_for_action(result.reply_markup, "csm")
+    assert master_callbacks
+
+    result = router.handle(telegram_user_id=2000001, data=master_callbacks[0])
+    service_callbacks = _callbacks_for_action(result.reply_markup, "css")
+    result = router.handle(telegram_user_id=2000001, data=service_callbacks[0])
+    date_callbacks = _callbacks_for_action(result.reply_markup, "csd")
+    result = router.handle(telegram_user_id=2000001, data=date_callbacks[0])
+    slot_callbacks = _callbacks_for_action(result.reply_markup, "csl")
+    result = router.handle(telegram_user_id=2000001, data=slot_callbacks[0])
+    result = router.handle(telegram_user_id=2000001, data="hb1|ccf")
+    action_callbacks = _callbacks_for_action(result.reply_markup, "cga")
+    assert action_callbacks
+
+    result = router.handle(telegram_user_id=2000001, data="hb1|cga")
+    assert "Введите имя участника" in result.text
+    result = router.handle_text(telegram_user_id=2000001, text_value="Петр")
+    assert result is not None
+    master_callbacks = _callbacks_for_action(result.reply_markup, "csm")
+    assert len(master_callbacks) >= 2
+
+    result = router.handle(telegram_user_id=2000001, data=master_callbacks[1])
+    service_callbacks = _callbacks_for_action(result.reply_markup, "css")
+    result = router.handle(telegram_user_id=2000001, data=service_callbacks[0])
+    date_callbacks = _callbacks_for_action(result.reply_markup, "csd")
+    assert len(date_callbacks) >= 2
+    result = router.handle(telegram_user_id=2000001, data=date_callbacks[1])
+    slot_callbacks = _callbacks_for_action(result.reply_markup, "csl")
+    result = router.handle(telegram_user_id=2000001, data=slot_callbacks[0])
+    result = router.handle(telegram_user_id=2000001, data="hb1|ccf")
+    action_callbacks = _callbacks_for_action(result.reply_markup, "cga")
+    assert action_callbacks
+
+    result = router.handle(telegram_user_id=2000001, data="hb1|cgf")
+    assert "Добавлено участников: 2" in result.text
+
+    with engine.begin() as conn:
+        rows = conn.execute(
+            text(
+                """
+                SELECT organizer_user_id, manual_client_name, master_id, slot_start
+                FROM bookings
+                WHERE organizer_user_id = 20
+                ORDER BY id
+                """
+            )
+        ).mappings().all()
+        assert len(rows) == 2
+        assert {str(row["manual_client_name"]) for row in rows} == {"Иван", "Петр"}
+        assert {int(row["master_id"]) for row in rows} == {1, 2}
+
+
+def test_client_grouped_booking_supports_participant_level_cancellation() -> None:
+    router = TelegramCallbackRouter(_setup_flow_schema())
+    router.seed_root_menu(telegram_user_id=2000001)
+
+    router.handle(telegram_user_id=2000001, data="hb1|cm")
+    router.handle(telegram_user_id=2000001, data="hb1|cg")
+    result = router.handle_text(telegram_user_id=2000001, text_value="Иван")
+    assert result is not None
+    master_callbacks = _callbacks_for_action(result.reply_markup, "csm")
+    result = router.handle(telegram_user_id=2000001, data=master_callbacks[0])
+    service_callbacks = _callbacks_for_action(result.reply_markup, "css")
+    result = router.handle(telegram_user_id=2000001, data=service_callbacks[0])
+    date_callbacks = _callbacks_for_action(result.reply_markup, "csd")
+    result = router.handle(telegram_user_id=2000001, data=date_callbacks[1])
+    slot_callbacks = _callbacks_for_action(result.reply_markup, "csl")
+    router.handle(telegram_user_id=2000001, data=slot_callbacks[0])
+    router.handle(telegram_user_id=2000001, data="hb1|ccf")
+    router.handle(telegram_user_id=2000001, data="hb1|cgf")
+
+    result = router.handle(telegram_user_id=2000001, data="hb1|cc")
+    cancel_pick_callbacks = _callbacks_for_action(result.reply_markup, "cci")
+    assert cancel_pick_callbacks
+    label = result.reply_markup.inline_keyboard[0][0].text
+    assert "Иван" in label
+
+    result = router.handle(telegram_user_id=2000001, data=cancel_pick_callbacks[0])
+    assert "Участник: Иван" in result.text
+    confirm_callbacks = _callbacks_for_action(result.reply_markup, "ccn")
+    assert confirm_callbacks
+    result = router.handle(telegram_user_id=2000001, data=confirm_callbacks[0])
+    assert "успешно отменена" in result.text

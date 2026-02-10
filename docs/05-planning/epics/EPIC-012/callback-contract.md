@@ -43,6 +43,9 @@ Actions (group-01):
 
 Actions (group-02, client flow):
 - `cb` -> start booking flow, show master list
+- `cg` -> start grouped booking flow (participant name input)
+- `cga` -> add next participant in grouped booking flow
+- `cgf` -> finish grouped booking flow and return to client menu
 - `csm|<master_id>` -> select master and show service list
 - `css|<service_code>` -> select service and show date list
 - `cdp|p<index>` -> move client booking date page within 60-day horizon

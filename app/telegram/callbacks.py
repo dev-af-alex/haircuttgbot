@@ -67,6 +67,9 @@ _ALLOWED_ACTIONS = {
     "mr",
     "bk",
     "cb",
+    "cg",
+    "cga",
+    "cgf",
     "cc",
     "csm",
     "css",
@@ -107,6 +110,9 @@ _PAGE_TOKEN_PATTERN = re_compile(r"^p\d{1,2}$")
 _ACTION_REQUIRED_COMMAND = {
     "cm": "client:book",
     "cb": "client:book",
+    "cg": "client:book",
+    "cga": "client:book",
+    "cgf": "client:book",
     "csm": "client:book",
     "css": "client:book",
     "csd": "client:book",
@@ -153,6 +159,8 @@ _MENU_CLIENT_SLOT_SELECT = "client_slot_select"
 _MENU_CLIENT_CONFIRM = "client_confirm"
 _MENU_CLIENT_CANCEL_SELECT = "client_cancel_select"
 _MENU_CLIENT_CANCEL_CONFIRM = "client_cancel_confirm"
+_MENU_CLIENT_GROUP_PARTICIPANT_INPUT = "client_group_participant_input"
+_MENU_CLIENT_GROUP_POST_CONFIRM = "client_group_post_confirm"
 
 _MENU_MASTER_SCHEDULE_DATE_SELECT = "master_schedule_date_select"
 _MENU_MASTER_DAY_OFF_SELECT = "master_day_off_select"
@@ -174,7 +182,7 @@ _MENU_MASTER_ADMIN_RENAME_INPUT = "master_admin_rename_input"
 
 _MENU_ALLOWED_ACTIONS = {
     _MENU_ROOT: {"hm", "cm", "mm"},
-    _MENU_CLIENT: {"hm", "bk", "cb", "cc"},
+    _MENU_CLIENT: {"hm", "bk", "cb", "cg", "cc"},
     _MENU_MASTER: {"hm", "bk", "msv", "msd", "mlm", "msb", "msc", "mam"},
     _MENU_CLIENT_MASTER_SELECT: {"hm", "bk", "csm"},
     _MENU_CLIENT_SERVICE_SELECT: {"hm", "bk", "css"},
@@ -183,6 +191,8 @@ _MENU_ALLOWED_ACTIONS = {
     _MENU_CLIENT_CONFIRM: {"hm", "bk", "ccf"},
     _MENU_CLIENT_CANCEL_SELECT: {"hm", "bk", "cci"},
     _MENU_CLIENT_CANCEL_CONFIRM: {"hm", "bk", "ccn"},
+    _MENU_CLIENT_GROUP_PARTICIPANT_INPUT: {"hm", "bk"},
+    _MENU_CLIENT_GROUP_POST_CONFIRM: {"hm", "bk", "cga", "cgf"},
     _MENU_MASTER_SCHEDULE_DATE_SELECT: {"hm", "mr", "msv"},
     _MENU_MASTER_DAY_OFF_SELECT: {"hm", "mr", "msu"},
     _MENU_MASTER_LUNCH_SELECT: {"hm", "mr", "mls"},
@@ -215,6 +225,7 @@ _MASTER_ADMIN_ADD_NICKNAME_PROMPT = (
 )
 _MASTER_ADMIN_RENAME_PROMPT = "Введите новое имя мастера (1-64 символа)."
 _MASTER_MANUAL_CLIENT_PROMPT = "Введите клиента для ручной записи (любой текст, до 160 символов)."
+_CLIENT_GROUP_PARTICIPANT_PROMPT = "Введите имя участника групповой записи (1-160 символов)."
 
 _ACTION_TARGET_MENU = {
     "hm": _MENU_ROOT,
@@ -437,6 +448,9 @@ class TelegramCallbackRouter:
 
         handlers: dict[str, Callable[[int, str | None], CallbackHandleResult]] = {
             "cb": lambda user_id, _: self._handle_client_start_booking(telegram_user_id=user_id),
+            "cg": lambda user_id, _: self._handle_client_group_start(telegram_user_id=user_id),
+            "cga": lambda user_id, _: self._handle_client_group_add_next(telegram_user_id=user_id),
+            "cgf": lambda user_id, _: self._handle_client_group_finish(telegram_user_id=user_id),
             "csm": self._handle_client_select_master,
             "css": self._handle_client_select_service,
             "cdp": self._handle_client_date_page,
@@ -482,6 +496,7 @@ class TelegramCallbackRouter:
             _MENU_MASTER_ADMIN_ADD_NICKNAME_INPUT,
             _MENU_MASTER_ADMIN_RENAME_INPUT,
             _MENU_MASTER_MANUAL_CLIENT_INPUT,
+            _MENU_CLIENT_GROUP_PARTICIPANT_INPUT,
         }:
             return None
 
@@ -514,6 +529,40 @@ class TelegramCallbackRouter:
                     client_name=manual_client_name,
                 ),
                 reply_markup=build_master_manual_confirm_markup(),
+            )
+
+        if current_menu == _MENU_CLIENT_GROUP_PARTICIPANT_INPUT:
+            participant_name = text_value.strip()
+            if not participant_name:
+                return CallbackHandleResult(
+                    text=f"{RU_BOOKING_MESSAGES['manual_booking_client_required']}\n{_CLIENT_GROUP_PARTICIPANT_PROMPT}",
+                    reply_markup=build_client_group_name_input_markup(),
+                )
+            if len(participant_name) > 160:
+                return CallbackHandleResult(
+                    text=f"{RU_BOOKING_MESSAGES['manual_booking_client_too_long']}\n{_CLIENT_GROUP_PARTICIPANT_PROMPT}",
+                    reply_markup=build_client_group_name_input_markup(),
+                )
+            response = self._flow.start()
+            masters = response.get("masters", [])
+            if not isinstance(masters, list) or not masters:
+                self._state.set_menu(telegram_user_id, _MENU_CLIENT)
+                return CallbackHandleResult(
+                    text="Нет доступных мастеров для записи.",
+                    reply_markup=build_menu_markup(_MENU_CLIENT),
+                )
+            self._state.set_context_value(telegram_user_id, "group_mode", "1")
+            self._state.set_context_value(telegram_user_id, "group_participant_name", participant_name)
+            if self._state.get_context_value(telegram_user_id, "group_booking_key") is None:
+                self._state.set_context_value(
+                    telegram_user_id,
+                    "group_booking_key",
+                    utc_now().strftime("g%Y%m%d%H%M%S"),
+                )
+            self._state.set_menu(telegram_user_id, _MENU_CLIENT_MASTER_SELECT)
+            return CallbackHandleResult(
+                text=f"Участник: {participant_name}\n{str(response.get('message', 'Выберите мастера.'))}",
+                reply_markup=build_client_master_markup(masters),
             )
 
         if not self._is_bootstrap_master(telegram_user_id=telegram_user_id):
@@ -618,6 +667,37 @@ class TelegramCallbackRouter:
         return CallbackHandleResult(
             text=str(response.get("message", "Выберите мастера.")),
             reply_markup=build_client_master_markup(masters),
+        )
+
+    def _handle_client_group_start(self, *, telegram_user_id: int) -> CallbackHandleResult:
+        self._state.set_menu(telegram_user_id, _MENU_CLIENT_GROUP_PARTICIPANT_INPUT, reset_context=True)
+        self._state.set_context_value(telegram_user_id, "group_mode", "1")
+        self._state.set_context_value(telegram_user_id, "group_created_count", "0")
+        self._state.set_context_value(telegram_user_id, "group_booking_key", utc_now().strftime("g%Y%m%d%H%M%S"))
+        return CallbackHandleResult(
+            text=_CLIENT_GROUP_PARTICIPANT_PROMPT,
+            reply_markup=build_client_group_name_input_markup(),
+        )
+
+    def _handle_client_group_add_next(self, *, telegram_user_id: int) -> CallbackHandleResult:
+        if self._state.get_context_value(telegram_user_id, "group_mode") != "1":
+            return self._stale_response(telegram_user_id=telegram_user_id)
+        self._state.set_menu(telegram_user_id, _MENU_CLIENT_GROUP_PARTICIPANT_INPUT)
+        return CallbackHandleResult(
+            text=_CLIENT_GROUP_PARTICIPANT_PROMPT,
+            reply_markup=build_client_group_name_input_markup(),
+        )
+
+    def _handle_client_group_finish(self, *, telegram_user_id: int) -> CallbackHandleResult:
+        created_count_raw = self._state.get_context_value(telegram_user_id, "group_created_count") or "0"
+        try:
+            created_count = int(created_count_raw)
+        except ValueError:
+            created_count = 0
+        self._state.set_menu(telegram_user_id, _MENU_CLIENT, reset_context=True)
+        return CallbackHandleResult(
+            text=f"Групповая запись завершена. Добавлено участников: {created_count}.",
+            reply_markup=build_menu_markup(_MENU_CLIENT),
         )
 
     def _handle_client_select_master(self, telegram_user_id: int, context: str | None) -> CallbackHandleResult:
@@ -760,12 +840,27 @@ class TelegramCallbackRouter:
         except ValueError:
             return self._invalid_response(telegram_user_id=telegram_user_id)
 
-        response = self._flow.confirm(
-            client_telegram_user_id=telegram_user_id,
-            master_id=master_id,
-            service_type=service_type,
-            slot_start=slot_start,
+        group_mode = self._state.get_context_value(telegram_user_id, "group_mode") == "1"
+        group_participant_name = self._state.get_context_value(telegram_user_id, "group_participant_name")
+        group_booking_key = self._state.get_context_value(telegram_user_id, "group_booking_key") or utc_now().strftime(
+            "g%Y%m%d%H%M%S"
         )
+        if group_mode and group_participant_name:
+            response = self._flow.confirm_group_participant(
+                client_telegram_user_id=telegram_user_id,
+                master_id=master_id,
+                service_type=service_type,
+                slot_start=slot_start,
+                participant_name=group_participant_name,
+                booking_group_key=group_booking_key,
+            )
+        else:
+            response = self._flow.confirm(
+                client_telegram_user_id=telegram_user_id,
+                master_id=master_id,
+                service_type=service_type,
+                slot_start=slot_start,
+            )
         result_message = str(response.get("message", ""))
         if response.get("created") is True:
             duration_minutes = self._resolve_service_duration_minutes(service_type=service_type)
@@ -778,6 +873,26 @@ class TelegramCallbackRouter:
                 f"Слот: {format_ru_slot_range(slot_start, duration_minutes=duration_minutes)} "
                 f"({format_ru_datetime(slot_start)})"
             ).strip()
+            if group_mode and group_participant_name:
+                created_count_raw = self._state.get_context_value(telegram_user_id, "group_created_count") or "0"
+                try:
+                    created_count = int(created_count_raw)
+                except ValueError:
+                    created_count = 0
+                created_count += 1
+                self._state.set_context_value(telegram_user_id, "group_created_count", str(created_count))
+                self._state.set_context_value(telegram_user_id, "group_booking_key", group_booking_key)
+                self._state.set_context_value(telegram_user_id, "group_participant_name", "")
+                self._state.set_menu(telegram_user_id, _MENU_CLIENT_GROUP_POST_CONFIRM)
+                return CallbackHandleResult(
+                    text=(
+                        f"Участник '{group_participant_name}' добавлен.\n"
+                        f"{result_message}\n"
+                        "Выберите следующее действие."
+                    ),
+                    reply_markup=build_client_group_post_confirm_markup(),
+                    notifications=_coerce_notifications(response.get("notifications")),
+                )
         self._state.set_menu(telegram_user_id, _MENU_CLIENT, reset_context=True)
         return CallbackHandleResult(
             text=result_message,
@@ -820,10 +935,14 @@ class TelegramCallbackRouter:
         summary = f"Подтвердите отмену записи #{booking_id}."
         if booking is not None:
             service_label = SERVICE_OPTION_LABELS_RU.get(booking["service_type"], booking["service_type"])
+            participant_suffix = ""
+            participant_name = booking.get("participant_name")
+            if isinstance(participant_name, str) and participant_name.strip():
+                participant_suffix = f"\nУчастник: {participant_name.strip()}"
             summary = (
                 f"{summary}\n"
                 f"Слот: {format_ru_datetime(booking['slot_start'])}\n"
-                f"Услуга: {service_label}"
+                f"Услуга: {service_label}{participant_suffix}"
             )
         return CallbackHandleResult(
             text=summary,
@@ -1380,21 +1499,36 @@ class TelegramCallbackRouter:
 
         now_utc = utc_now()
         with self._engine.connect() as conn:
-            rows = conn.execute(
-                text(
-                    """
-                    SELECT b.id, b.slot_start, b.service_type, m.display_name
-                    , m.id AS master_id
-                    FROM bookings b
-                    JOIN masters m ON m.id = b.master_id
-                    WHERE b.client_user_id = :client_user_id
-                      AND b.status = 'active'
-                      AND b.slot_start >= :now_utc
-                    ORDER BY b.slot_start
-                    """
-                ),
-                {"client_user_id": client_user_id, "now_utc": now_utc},
-            ).mappings()
+            try:
+                rows = conn.execute(
+                    text(
+                        """
+                        SELECT b.id, b.slot_start, b.service_type, b.manual_client_name, m.display_name, m.id AS master_id
+                        FROM bookings b
+                        JOIN masters m ON m.id = b.master_id
+                        WHERE (b.client_user_id = :client_user_id OR b.organizer_user_id = :client_user_id)
+                          AND b.status = 'active'
+                          AND b.slot_start >= :now_utc
+                        ORDER BY b.slot_start
+                        """
+                    ),
+                    {"client_user_id": client_user_id, "now_utc": now_utc},
+                ).mappings()
+            except Exception:
+                rows = conn.execute(
+                    text(
+                        """
+                        SELECT b.id, b.slot_start, b.service_type, b.manual_client_name, m.display_name, m.id AS master_id
+                        FROM bookings b
+                        JOIN masters m ON m.id = b.master_id
+                        WHERE b.client_user_id = :client_user_id
+                          AND b.status = 'active'
+                          AND b.slot_start >= :now_utc
+                        ORDER BY b.slot_start
+                        """
+                    ),
+                    {"client_user_id": client_user_id, "now_utc": now_utc},
+                ).mappings()
             result: list[dict[str, object]] = []
             for row in rows:
                 slot_start = _as_datetime(row["slot_start"])
@@ -1403,6 +1537,7 @@ class TelegramCallbackRouter:
                         "id": int(row["id"]),
                         "slot_start": slot_start,
                         "service_type": str(row["service_type"]),
+                        "participant_name": _as_str_or_none(row["manual_client_name"]),
                         "master_name": _format_master_display_name(
                             master_id=int(row["master_id"]),
                             raw_display_name=row["display_name"],
@@ -1658,6 +1793,7 @@ def build_menu_markup(menu: str) -> InlineKeyboardMarkup:
         rows = chunk_inline_buttons(
             [
                 InlineKeyboardButton(text="Новая запись", callback_data=encode_callback_data(action="cb")),
+                InlineKeyboardButton(text="Групповая запись", callback_data=encode_callback_data(action="cg")),
                 InlineKeyboardButton(text="Отменить запись", callback_data=encode_callback_data(action="cc")),
             ],
             max_per_row=MOBILE_MENU_MAX_BUTTONS_PER_ROW,
@@ -1839,15 +1975,32 @@ def build_master_manual_client_input_markup() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=_back_and_home_rows(action_back="mr"))
 
 
+def build_client_group_name_input_markup() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=_back_and_home_rows(action_back="bk"))
+
+
+def build_client_group_post_confirm_markup() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Добавить участника", callback_data=encode_callback_data(action="cga"))],
+            [InlineKeyboardButton(text="Завершить группу", callback_data=encode_callback_data(action="cgf"))],
+            *(_back_and_home_rows(action_back="bk")),
+        ]
+    )
+
+
 def build_client_cancel_select_markup(bookings: list[dict[str, object]]) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     for booking in bookings:
         booking_id = booking.get("id")
         slot_start = booking.get("slot_start")
         master_name = booking.get("master_name")
+        participant_name = booking.get("participant_name")
         if not isinstance(booking_id, int) or not isinstance(slot_start, datetime) or not isinstance(master_name, str):
             continue
         label = f"#{booking_id} {format_ru_datetime(slot_start)} {master_name}"
+        if isinstance(participant_name, str) and participant_name.strip():
+            label = f"{label} ({participant_name.strip()})"
         rows.append(
             [
                 InlineKeyboardButton(

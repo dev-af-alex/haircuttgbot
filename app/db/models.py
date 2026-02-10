@@ -72,7 +72,9 @@ class Booking(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     master_id: Mapped[int] = mapped_column(ForeignKey("masters.id"), nullable=False)
-    client_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    client_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    organizer_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    booking_group_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
     service_type: Mapped[str] = mapped_column(String(32), nullable=False)
     slot_start: Mapped[DateTime] = mapped_column(DateTime(timezone=True), nullable=False)
     slot_end: Mapped[DateTime] = mapped_column(DateTime(timezone=True), nullable=False)

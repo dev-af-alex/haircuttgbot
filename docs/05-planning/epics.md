@@ -276,3 +276,15 @@ Rules:
     - Dependencies: EPIC-012, EPIC-014, EPIC-016, EPIC-021.
     - Local-run impact: compose runtime stays unchanged; smoke and callback regression coverage expand to include paginated date navigation and far-horizon booking validation.
     - Delivered: shared 60-day paginated date-picker contract (`cdp`/`mbp`) for client + master manual flows, horizon-bound token validation, far-date regression coverage, accepted ADR-0022, and synchronized local-dev smoke docs; merge gates satisfied locally (full pytest + compose smoke), intentional deviation: CI/SAST/dep/secrets checks not re-run in this close step.
+
+- EPIC-026 — Grouped booking for multiple people by one client — Status: DONE
+    - Goal: allow one client to place one grouped booking request for multiple participants, each with organizer-provided name and independently managed appointments.
+    - Acceptance:
+        - Client can add multiple participants in one grouped booking flow, each with required name field.
+        - Participant appointments can target different masters and different dates/times (no same-master/day restriction inside one group).
+        - Organizer-level booking ownership policy from `FR-017` remains unchanged (no relaxation).
+        - Cancellation works per participant, with clear participant identification in confirmations/notifications.
+        - Local/VM smoke includes grouped booking creation with at least two participants across different master/day combinations and participant-level cancellation.
+    - Dependencies: EPIC-004, EPIC-005, EPIC-012, EPIC-014, EPIC-021, EPIC-025.
+    - Local-run impact: callback flow/state, booking data model, and smoke scenarios expand to participant-aware grouped booking operations while keeping compose runtime path unchanged.
+    - Delivered: grouped participant booking model (`organizer_user_id`, `booking_group_key`) with required participant names, grouped callback flow (`cg/cga/cgf`) for multi-master/multi-day participant assignment, participant-level cancellation via organizer ownership path, participant-aware cancellation labels/texts, accepted ADR-0023, and synchronized local/VM/docs contracts; merge gates satisfied locally (`pytest`, compose smoke), intentional deviation: CI/SAST/dep/secrets checks not re-run in this close step.

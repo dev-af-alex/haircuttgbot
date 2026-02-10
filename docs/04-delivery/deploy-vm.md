@@ -202,6 +202,7 @@ Then run the canonical smoke path from `docs/04-delivery/local-dev.md` against V
 For EPIC-024 performance validation, run the profiling contract from `docs/04-delivery/performance-check.md` against VM PostgreSQL and archive the generated report for release evidence.
 When Telegram token is configured, additionally validate button-first chat flows:
 - `Client`: `/start` from non-preseeded user shows greeting, auto-registers user (`Client` role), and opens `Меню клиента` directly; then new booking + cancel booking via buttons.
+- `Client` grouped flow: `Групповая запись` -> participant name input -> independent master/date/slot per participant -> finish group; verify participant-level cancellation via `Отменить запись`.
 - `Client` mixed-duration check: `Стрижка` shows 30-minute slot range labels (for example `10:00-10:30`), `Стрижка + борода` remains hourly (`10:00-11:00`).
 - `Client` same-day guardrail: if current time in `BUSINESS_TIMEZONE` is `15:00`, slots earlier than `15:30` are not available/confirmable.
 - `Master`: `/start` shows greeting and opens `Меню мастера` directly, then schedule view + day-off + lunch update + manual booking + cancellation with reason via buttons; schedule view first requires date selection and outputs should use readable labels (`DD.MM.YYYY HH:MM`, `HH:MM-HH:MM`).
