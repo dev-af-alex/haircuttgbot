@@ -6,12 +6,13 @@ from datetime import UTC, date, datetime, time, timedelta
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-from app.booking.guardrails import normalize_utc, same_day_min_slot_start
+from app.booking.guardrails import same_day_min_slot_start
 from app.booking.intervals import is_interval_blocked
 from app.booking.service_options import (
     DEFAULT_SLOT_STEP_MINUTES,
     resolve_service_duration_minutes,
 )
+from app.timezone import business_day_bounds, combine_business_date_time, normalize_utc
 
 
 @dataclass(frozen=True)
@@ -58,11 +59,13 @@ class AvailabilityService:
             lunch_start = _as_time(master["lunch_start"])
             lunch_end = _as_time(master["lunch_end"])
 
-            day_start = datetime.combine(on_date, time.min, tzinfo=UTC)
-            day_end = day_start + timedelta(days=1)
+            day_start, day_end = business_day_bounds(on_date)
 
             blocked_ranges = [
-                (datetime.combine(on_date, lunch_start, tzinfo=UTC), datetime.combine(on_date, lunch_end, tzinfo=UTC))
+                (
+                    combine_business_date_time(on_date, lunch_start),
+                    combine_business_date_time(on_date, lunch_end),
+                )
             ]
 
             booking_rows = conn.execute(
@@ -99,8 +102,8 @@ class AvailabilityService:
                 blocked_ranges.append((_as_datetime(row["start_at"]), _as_datetime(row["end_at"])))
 
             slots: list[AvailabilitySlot] = []
-            slot_start = datetime.combine(on_date, work_start, tzinfo=UTC)
-            slot_cutoff = datetime.combine(on_date, work_end, tzinfo=UTC)
+            slot_start = combine_business_date_time(on_date, work_start)
+            slot_cutoff = combine_business_date_time(on_date, work_end)
 
             now_utc = _normalize_now(now)
             same_day_min_start = None

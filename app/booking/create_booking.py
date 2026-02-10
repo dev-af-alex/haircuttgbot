@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, time, timedelta
+from datetime import datetime, time, timedelta
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
@@ -10,6 +10,7 @@ from app.booking.contracts import BOOKING_STATUS_ACTIVE
 from app.booking.guardrails import is_slot_start_allowed
 from app.booking.messages import RU_BOOKING_MESSAGES
 from app.booking.service_options import DEFAULT_SLOT_STEP_MINUTES, resolve_service_duration_minutes
+from app.timezone import business_date, combine_business_date_time, normalize_utc, utc_now
 
 
 @dataclass(frozen=True)
@@ -33,7 +34,7 @@ class BookingService:
         now: datetime | None = None,
     ) -> BookingCreateResult:
         slot_start_utc = _to_utc(slot_start)
-        now_utc = _to_utc(now) if now is not None else datetime.now(UTC)
+        now_utc = _to_utc(now) if now is not None else utc_now()
 
         with self._engine.begin() as conn:
             duration_minutes = resolve_service_duration_minutes(service_type, connection=conn)
@@ -60,30 +61,11 @@ class BookingService:
             lunch_start = _as_time(master["lunch_start"])
             lunch_end = _as_time(master["lunch_end"])
 
-            day_work_start = slot_start_utc.replace(
-                hour=work_start.hour,
-                minute=work_start.minute,
-                second=work_start.second,
-                microsecond=0,
-            )
-            day_work_end = slot_start_utc.replace(
-                hour=work_end.hour,
-                minute=work_end.minute,
-                second=work_end.second,
-                microsecond=0,
-            )
-            day_lunch_start = slot_start_utc.replace(
-                hour=lunch_start.hour,
-                minute=lunch_start.minute,
-                second=lunch_start.second,
-                microsecond=0,
-            )
-            day_lunch_end = slot_start_utc.replace(
-                hour=lunch_end.hour,
-                minute=lunch_end.minute,
-                second=lunch_end.second,
-                microsecond=0,
-            )
+            business_slot_date = business_date(slot_start_utc)
+            day_work_start = combine_business_date_time(business_slot_date, work_start)
+            day_work_end = combine_business_date_time(business_slot_date, work_end)
+            day_lunch_start = combine_business_date_time(business_slot_date, lunch_start)
+            day_lunch_end = combine_business_date_time(business_slot_date, lunch_end)
 
             if not is_slot_start_allowed(
                 slot_start=slot_start_utc,
@@ -186,9 +168,7 @@ class BookingService:
 
 
 def _to_utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=UTC)
-    return value.astimezone(UTC)
+    return normalize_utc(value)
 
 
 def _as_time(value: time | str) -> time:

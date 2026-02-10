@@ -40,6 +40,7 @@ from app.observability import (
     set_service_health,
 )
 from app.throttling import TelegramCommandThrottle
+from app.timezone import get_business_timezone
 from app.telegram import configure_dispatcher
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -87,6 +88,12 @@ def _resolve_telegram_runtime_policy(*, raw_mode: str | None, bot_token: str) ->
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    try:
+        business_timezone = get_business_timezone()
+    except ValueError as exc:
+        emit_event("startup_config_failed", reason="invalid_business_timezone", error=str(exc))
+        raise RuntimeError(str(exc)) from exc
+
     try:
         bootstrap_master_telegram_user_id = resolve_bootstrap_master_telegram_id(
             os.getenv(BOOTSTRAP_MASTER_TELEGRAM_ID_ENV)
@@ -136,6 +143,7 @@ async def lifespan(_: FastAPI):
         telegram_updates_runtime=(
             "polling" if runtime_policy["start_polling"] else "disabled"
         ),
+        business_timezone=str(business_timezone),
     )
     try:
         yield

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
@@ -11,6 +11,7 @@ from app.booking.cancel_booking import BookingCancellationService
 from app.booking.create_booking import BookingService
 from app.booking.messages import RU_BOOKING_MESSAGES
 from app.booking.service_options import list_service_options
+from app.timezone import utc_now
 
 
 @dataclass(frozen=True)
@@ -194,7 +195,7 @@ class TelegramBookingFlowService:
             master_id=master_id,
             on_date=on_date,
             service_type=service_type,
-            now=datetime.now(UTC),
+            now=utc_now(),
         )
         return {
             "message": RU_BOOKING_MESSAGES["choose_slot"],

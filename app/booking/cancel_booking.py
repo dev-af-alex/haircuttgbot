@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
@@ -13,6 +13,7 @@ from app.booking.contracts import (
     is_cancellation_reason_required,
 )
 from app.booking.messages import RU_BOOKING_MESSAGES
+from app.timezone import normalize_utc, utc_now
 
 
 @dataclass(frozen=True)
@@ -36,7 +37,7 @@ class BookingCancellationService:
         client_user_id: int,
         now: datetime | None = None,
     ) -> BookingCancelResult:
-        now_utc = _to_utc(now) if now is not None else datetime.now(UTC)
+        now_utc = _to_utc(now) if now is not None else utc_now()
 
         with self._engine.begin() as conn:
             booking = conn.execute(
@@ -103,7 +104,7 @@ class BookingCancellationService:
         reason: str,
         now: datetime | None = None,
     ) -> BookingCancelResult:
-        now_utc = _to_utc(now) if now is not None else datetime.now(UTC)
+        now_utc = _to_utc(now) if now is not None else utc_now()
         normalized_reason = reason.strip()
 
         if is_cancellation_reason_required(target_status=BOOKING_STATUS_CANCELLED_BY_MASTER) and not normalized_reason:
@@ -171,9 +172,7 @@ class BookingCancellationService:
 
 
 def _to_utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=UTC)
-    return value.astimezone(UTC)
+    return normalize_utc(value)
 
 
 def _coerce_datetime(value: datetime | str) -> datetime:

@@ -27,6 +27,13 @@ from app.booking import (
 )
 from app.db.seed import BOOTSTRAP_MASTER_TELEGRAM_ID_ENV, resolve_bootstrap_master_telegram_id
 from app.observability import emit_event, observe_master_admin_outcome
+from app.timezone import (
+    business_day_bounds,
+    business_now,
+    combine_business_date_time,
+    normalize_utc,
+    utc_now,
+)
 from app.telegram.presentation import (
     MOBILE_DATE_SLOT_MAX_BUTTONS_PER_ROW,
     MOBILE_MENU_MAX_BUTTONS_PER_ROW,
@@ -789,8 +796,7 @@ class TelegramCallbackRouter:
         except ValueError:
             return self._invalid_response(telegram_user_id=telegram_user_id)
 
-        day_start = datetime.combine(on_date, dt_time.min, tzinfo=UTC)
-        day_end = day_start + timedelta(days=1)
+        day_start, day_end = business_day_bounds(on_date)
         with self._engine.connect() as conn:
             master = conn.execute(
                 text(
@@ -874,8 +880,8 @@ class TelegramCallbackRouter:
         result = self._schedule.upsert_day_off(
             master_telegram_user_id=telegram_user_id,
             command=MasterDayOffCommand(
-                start_at=datetime.combine(on_date, work_start, tzinfo=UTC),
-                end_at=datetime.combine(on_date, work_end, tzinfo=UTC),
+                start_at=combine_business_date_time(on_date, work_start),
+                end_at=combine_business_date_time(on_date, work_end),
             ),
         )
         result_text = (
@@ -1239,7 +1245,7 @@ class TelegramCallbackRouter:
         if client_user_id is None:
             return []
 
-        now_utc = datetime.now(UTC)
+        now_utc = utc_now()
         with self._engine.connect() as conn:
             rows = conn.execute(
                 text(
@@ -1294,7 +1300,7 @@ class TelegramCallbackRouter:
         if master_ctx is None:
             return []
 
-        now_utc = datetime.now(UTC)
+        now_utc = utc_now()
         with self._engine.connect() as conn:
             rows = conn.execute(
                 text(
@@ -1416,7 +1422,7 @@ def _parse_slot_token(token: str) -> datetime:
     if not _SLOT_TOKEN_PATTERN.match(token):
         raise ValueError("Invalid slot token")
     parsed = datetime.strptime(token, "%Y%m%d%H%M")
-    return parsed.replace(tzinfo=UTC)
+    return normalize_utc(parsed)
 
 
 def _format_slot_token(slot_start: datetime) -> str:
@@ -1431,9 +1437,9 @@ def _parse_date_token(token: str) -> date:
 
 def _as_datetime(value: datetime | str) -> datetime:
     if isinstance(value, datetime):
-        return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+        return normalize_utc(value)
     parsed = datetime.fromisoformat(str(value))
-    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+    return normalize_utc(parsed)
 
 
 def build_root_menu_markup() -> InlineKeyboardMarkup:
@@ -1517,7 +1523,7 @@ def build_master_service_markup() -> InlineKeyboardMarkup:
 
 
 def build_client_date_markup(*, action: str, days_ahead: int = 7, action_back: str = "bk") -> InlineKeyboardMarkup:
-    today = datetime.now(UTC).date()
+    today = business_now().date()
     buttons: list[InlineKeyboardButton] = []
     for offset in range(days_ahead):
         day = today + timedelta(days=offset)

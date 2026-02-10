@@ -15,6 +15,7 @@ A developer can run:
 - Optional for host-side unit tests: Python 3.12 virtualenv with dependencies installed in `.venv`
 - Optional: copy `.env.example` to `.env`, set `TELEGRAM_BOT_TOKEN`, and keep `TELEGRAM_UPDATES_MODE=polling` for real Telegram integration tests.
 - Required bootstrap config: `BOOTSTRAP_MASTER_TELEGRAM_ID` must be a positive integer Telegram user ID (compose default is `1000001`).
+- Business time config: `BUSINESS_TIMEZONE` must be a valid IANA timezone (compose default is `Europe/Moscow`).
 
 ## Local run steps (must be kept current)
 
@@ -61,8 +62,9 @@ A developer can run:
    `docker compose exec -T postgres psql -U haircuttgbot -d haircuttgbot -c "SELECT code, duration_minutes FROM services ORDER BY code;"`
 7. Confirm startup structured log exists:
    `docker compose logs bot-api --tail=200 | grep '"event": "startup"'`
+   `docker compose logs bot-api --tail=200 | grep '"business_timezone": "Europe/Moscow"'`
 8. Validate functional smoke coverage via automated test suite (no inline scripts in docs):
-   `.venv/bin/pytest -q tests/test_health.py tests/test_idempotency.py tests/test_booking.py tests/test_telegram_callbacks.py tests/test_telegram_master_callbacks.py tests/test_master_admin.py tests/test_throttling.py tests/test_observability.py`
+   `.venv/bin/pytest -q tests/test_health.py tests/test_idempotency.py tests/test_booking.py tests/test_telegram_callbacks.py tests/test_telegram_master_callbacks.py tests/test_master_admin.py tests/test_throttling.py tests/test_observability.py tests/test_timezone.py`
    - Coverage must include mixed-duration booking behavior (30-minute and 60-minute service scenarios) via `tests/test_booking.py` and callback flow tests.
 9. Rehearse PostgreSQL backup/restore once per release candidate (or when schema changes):
    follow `docs/04-delivery/postgresql-backup-restore.md`
@@ -74,11 +76,13 @@ Use this sequence when validating aiogram runtime against a real Telegram chat.
 1. Configure `.env`:
    - `TELEGRAM_BOT_TOKEN=<your_bot_token>`
    - `TELEGRAM_UPDATES_MODE=polling`
+   - `BUSINESS_TIMEZONE=Europe/Moscow`
 2. Start stack and seed baseline:
    - `docker compose up -d --build`
    - `docker compose exec -T bot-api python -m app.db.seed`
 3. Ensure polling runtime is active:
    - `docker compose logs bot-api --tail=200 | grep 'telegram_updates_runtime_started'`
+   - `docker compose logs bot-api --tail=200 | grep 'business_timezone'`
 4. In Telegram chat with bot run `/start` from a Telegram account that is not pre-seeded in DB:
    - verify greeting + direct role landing to `Меню клиента`;
    - optional DB check (replace `YOUR_TG_ID`): `docker compose exec -T postgres psql -U haircuttgbot -d haircuttgbot -c "SELECT telegram_user_id, telegram_username FROM users WHERE telegram_user_id=YOUR_TG_ID;"`
@@ -105,7 +109,7 @@ Use this sequence when validating aiogram runtime against a real Telegram chat.
      - `Выходной день` and `Обед` confirmations include readable interval/date details;
      - `Ручная запись` and `Отмена записи` confirmations include readable `Слот` details and reason context.
    - validate EPIC-016 guardrails:
-     - if current time is `15:00`, in client `Новая запись` same-day slots earlier than `15:30` are not offered;
+     - if current time in `BUSINESS_TIMEZONE` is `15:00`, in client `Новая запись` same-day slots earlier than `15:30` are not offered;
      - for an occupied date, `Выходной день` returns rejection text about existing active bookings.
 9. Optional bootstrap-master administration validation (same master account as `BOOTSTRAP_MASTER_TELEGRAM_ID`):
    - in `Мастер` menu open `Управление мастерами`;

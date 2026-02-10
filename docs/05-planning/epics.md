@@ -219,3 +219,15 @@ Rules:
     - Dependencies: EPIC-018, EPIC-019.
     - Local-run impact: compose smoke remains runnable while replacing compatibility checks with baseline-flow validations and owner rename checks.
     - Delivered: Group 01 finalized ADR-0017 and removed pre-deploy optional service-type compatibility branches; Group 02 delivered bootstrap-owner-only master rename domain + callback flow with audit/metric outcome reasons; Group 03 added rename/cleanup regressions and synchronized local/VM smoke runbooks.
+
+- EPIC-021 — Configurable business timezone and temporal consistency — Status: DONE
+    - Goal: make all booking/schedule time-dependent behavior run in a configurable business timezone (for example, `Europe/Moscow`) while preserving UTC-safe storage and existing guardrail semantics.
+    - Acceptance:
+        - A required runtime config (for example, `BUSINESS_TIMEZONE`) is introduced with safe default (`Europe/Moscow`) and strict validation against IANA TZ database names.
+        - All user-facing times, same-day lead-time guardrails, and date-based schedule calculations are evaluated in business timezone, not host OS timezone.
+        - DB persistence remains normalized in UTC (`TIMESTAMPTZ` semantics), with deterministic conversion on read/write boundaries.
+        - Regression coverage includes DST-safe behavior (for non-Moscow zones), same-day rejection windows, slot generation, and cancellation/schedule flows under non-UTC timezone config.
+        - Local and VM runbooks include timezone config verification and smoke steps that prove configured timezone is active in logs and functional paths.
+    - Dependencies: EPIC-014, EPIC-016, EPIC-020.
+    - Local-run impact: `.env`/compose contract gains timezone variable; smoke assertions become timezone-aware for date/slot windows and readable time formatting.
+    - Delivered: Group 01 accepted ADR-0018 and introduced validated `BUSINESS_TIMEZONE` with shared UTC/business-time helpers; Group 02 switched booking/schedule/callback time semantics to business timezone with UTC persistence boundaries; Group 03 added timezone + DST regression coverage and synchronized local/VM smoke runbooks.

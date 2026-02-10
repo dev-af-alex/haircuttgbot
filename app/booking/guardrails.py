@@ -1,16 +1,11 @@
 from __future__ import annotations
 
 import math
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
+
+from app.timezone import get_business_timezone, normalize_utc
 
 DEFAULT_MIN_LEAD_MINUTES = 30
-
-
-def normalize_utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=UTC)
-    return value.astimezone(UTC)
-
 
 def same_day_min_slot_start(
     *,
@@ -19,15 +14,15 @@ def same_day_min_slot_start(
     slot_step_minutes: int,
     min_lead_minutes: int = DEFAULT_MIN_LEAD_MINUTES,
 ) -> datetime | None:
-    now_utc = normalize_utc(now)
-    if on_date != now_utc.date():
+    now_business = normalize_utc(now).astimezone(get_business_timezone())
+    if on_date != now_business.date():
         return None
 
-    threshold = now_utc + timedelta(minutes=min_lead_minutes)
-    day_start = datetime.combine(on_date, time.min, tzinfo=UTC)
+    threshold = now_business + timedelta(minutes=min_lead_minutes)
+    day_start = datetime.combine(on_date, time.min, tzinfo=get_business_timezone())
     total_minutes = (threshold - day_start).total_seconds() / 60
     rounded_minutes = int(math.ceil(total_minutes / slot_step_minutes) * slot_step_minutes)
-    return day_start + timedelta(minutes=rounded_minutes)
+    return normalize_utc(day_start + timedelta(minutes=rounded_minutes))
 
 
 def is_slot_start_allowed(

@@ -76,6 +76,7 @@ The bundle must not include real secret values.
 - Minimum secret set:
   - `TELEGRAM_BOT_TOKEN`
   - `TELEGRAM_UPDATES_MODE` (`polling` default in current baseline; `disabled` for maintenance windows)
+  - `BUSINESS_TIMEZONE` (IANA timezone, default `Europe/Moscow`)
   - `BOOTSTRAP_MASTER_TELEGRAM_ID` (required positive integer Telegram user ID for bootstrap master provisioning)
   - `DATABASE_URL` (if not composed from service defaults)
   - any future third-party API keys
@@ -141,6 +142,7 @@ Create `/opt/haircuttgbot/shared/.env` from the template values:
 cat >/opt/haircuttgbot/shared/.env <<'ENV'
 TELEGRAM_BOT_TOKEN=replace_me
 TELEGRAM_UPDATES_MODE=polling
+BUSINESS_TIMEZONE=Europe/Moscow
 BOOTSTRAP_MASTER_TELEGRAM_ID=1000001
 # Optional when defaults are overridden:
 # DATABASE_URL=postgresql+psycopg://haircuttgbot:haircuttgbot@postgres:5432/haircuttgbot
@@ -192,13 +194,14 @@ Run on VM:
 curl -fsS http://127.0.0.1:8080/health
 curl -fsS http://127.0.0.1:8080/metrics | grep -E 'bot_api_service_health|bot_api_requests_total|bot_api_request_latency_seconds|bot_api_booking_outcomes_total|bot_api_master_admin_outcomes_total|bot_api_abuse_outcomes_total'
 docker compose --env-file /opt/haircuttgbot/shared/.env logs bot-api --tail=50 | grep '"event": "startup"'
+docker compose --env-file /opt/haircuttgbot/shared/.env logs bot-api --tail=50 | grep '"business_timezone": "Europe/Moscow"'
 ```
 
 Then run the canonical smoke path from `docs/04-delivery/local-dev.md` against VM services (bootstrap-only seed baseline + first-user auto-registration + booking/cancellation/schedule + bootstrap master add/remove scenario).
 When Telegram token is configured, additionally validate button-first chat flows:
 - `Client`: `/start` from non-preseeded user shows greeting, auto-registers user (`Client` role), and opens `Меню клиента` directly; then new booking + cancel booking via buttons.
 - `Client` mixed-duration check: `Стрижка` shows 30-minute slot range labels (for example `10:00-10:30`), `Стрижка + борода` remains hourly (`10:00-11:00`).
-- `Client` same-day guardrail: if now is `15:00`, slots earlier than `15:30` are not available/confirmable.
+- `Client` same-day guardrail: if current time in `BUSINESS_TIMEZONE` is `15:00`, slots earlier than `15:30` are not available/confirmable.
 - `Master`: `/start` shows greeting and opens `Меню мастера` directly, then schedule view + day-off + lunch update + manual booking + cancellation with reason via buttons; schedule view first requires date selection and outputs should use readable labels (`DD.MM.YYYY HH:MM`, `HH:MM-HH:MM`).
 - `Master` day-off guardrail: on date with active bookings, day-off action returns deterministic rejection about existing bookings.
 - `Bootstrap master`: `Управление мастерами` -> ensure target user has executed `/start` and has stored `users.telegram_username` -> add by `@nickname` (plus invalid/unknown rejection checks) -> rename target master (plus invalid-name rejection) -> remove same master.

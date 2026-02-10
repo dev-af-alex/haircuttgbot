@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 
 from aiogram.types import InlineKeyboardButton
+from app.timezone import to_business
 
 RU_DATE_FORMAT = "%d.%m.%Y"
 RU_TIME_FORMAT = "%H:%M"
@@ -18,13 +19,13 @@ def format_ru_date(value: date) -> str:
 
 def format_ru_time(value: datetime | time) -> str:
     if isinstance(value, datetime):
-        normalized = value.astimezone(UTC)
+        normalized = to_business(value)
         return normalized.strftime(RU_TIME_FORMAT)
     return value.strftime(RU_TIME_FORMAT)
 
 
 def format_ru_datetime(value: datetime) -> str:
-    return value.astimezone(UTC).strftime(RU_DATETIME_FORMAT)
+    return to_business(value).strftime(RU_DATETIME_FORMAT)
 
 
 def format_ru_slot_range(start_at: datetime, *, duration_minutes: int) -> str:
