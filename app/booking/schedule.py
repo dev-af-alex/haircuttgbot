@@ -7,7 +7,6 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
 
 from app.booking.contracts import BOOKING_STATUS_ACTIVE
-from app.booking.intervals import sql_overlap_predicate
 from app.booking.messages import RU_BOOKING_MESSAGES
 from app.booking.service_options import resolve_service_duration_minutes
 
@@ -134,14 +133,8 @@ class MasterScheduleService:
                     FROM availability_blocks
                     WHERE master_id = :master_id
                       AND block_type = :block_type
-                      AND """
-                    + sql_overlap_predicate(
-                        start_column="start_at",
-                        end_column="end_at",
-                        start_param="start_at",
-                        end_param="end_at",
-                    )
-                    + """
+                      AND start_at < :end_at
+                      AND :start_at < end_at
                       AND (:block_id IS NULL OR id <> :block_id)
                     LIMIT 1
                     """
@@ -236,14 +229,8 @@ class MasterScheduleService:
                 FROM bookings
                 WHERE master_id = :master_id
                   AND status = :active_status
-                  AND """
-                + sql_overlap_predicate(
-                    start_column="slot_start",
-                    end_column="slot_end",
-                    start_param="start_at",
-                    end_param="end_at",
-                )
-                + """
+                  AND slot_start < :end_at
+                  AND :start_at < slot_end
                 LIMIT 1
                 """
             ),
@@ -429,14 +416,8 @@ class MasterScheduleService:
                     FROM bookings
                     WHERE master_id = :master_id
                       AND status = :status
-                      AND """
-                    + sql_overlap_predicate(
-                        start_column="slot_start",
-                        end_column="slot_end",
-                        start_param="slot_start",
-                        end_param="slot_end",
-                    )
-                    + """
+                      AND slot_start < :slot_end
+                      AND :slot_start < slot_end
                     LIMIT 1
                     """
                 ),
@@ -460,14 +441,8 @@ class MasterScheduleService:
                     SELECT 1
                     FROM availability_blocks
                     WHERE master_id = :master_id
-                      AND """
-                    + sql_overlap_predicate(
-                        start_column="start_at",
-                        end_column="end_at",
-                        start_param="slot_start",
-                        end_param="slot_end",
-                    )
-                    + """
+                      AND start_at < :slot_end
+                      AND :slot_start < end_at
                     LIMIT 1
                     """
                 ),

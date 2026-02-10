@@ -10,7 +10,7 @@ from app.booking.contracts import (
 )
 from app.booking.create_booking import BookingCreateResult, BookingService
 from app.booking.flow import BookingFlowRepository, BookingNotification, BookingNotificationService, TelegramBookingFlowService
-from app.booking.intervals import intervals_overlap, is_interval_blocked, sql_overlap_predicate
+from app.booking.intervals import intervals_overlap, is_interval_blocked
 from app.booking.master_admin import MasterAdminResult, MasterAdminService
 from app.booking.messages import RU_BOOKING_MESSAGES
 from app.booking.schedule import (
@@ -59,7 +59,6 @@ __all__ = [
     "MasterAdminService",
     "intervals_overlap",
     "is_interval_blocked",
-    "sql_overlap_predicate",
     "BOOKING_STATUS_ACTIVE",
     "BOOKING_STATUS_CANCELLED_BY_CLIENT",
     "BOOKING_STATUS_CANCELLED_BY_MASTER",

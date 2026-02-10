@@ -12,7 +12,3 @@ def is_interval_blocked(*, start_at: datetime, end_at: datetime, blocked_ranges:
         if intervals_overlap(start_at=start_at, end_at=end_at, other_start=blocked_start, other_end=blocked_end):
             return True
     return False
-
-
-def sql_overlap_predicate(*, start_column: str, end_column: str, start_param: str, end_param: str) -> str:
-    return f"{start_column} < :{end_param} AND :{start_param} < {end_column}"

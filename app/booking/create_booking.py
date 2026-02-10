@@ -8,7 +8,6 @@ from sqlalchemy.engine import Engine
 
 from app.booking.contracts import BOOKING_STATUS_ACTIVE
 from app.booking.guardrails import is_slot_start_allowed
-from app.booking.intervals import sql_overlap_predicate
 from app.booking.messages import RU_BOOKING_MESSAGES
 from app.booking.service_options import DEFAULT_SLOT_STEP_MINUTES, resolve_service_duration_minutes
 
@@ -126,14 +125,8 @@ class BookingService:
                     FROM bookings
                     WHERE master_id = :master_id
                       AND status = :status
-                      AND """
-                    + sql_overlap_predicate(
-                        start_column="slot_start",
-                        end_column="slot_end",
-                        start_param="slot_start",
-                        end_param="slot_end",
-                    )
-                    + """
+                      AND slot_start < :slot_end
+                      AND :slot_start < slot_end
                     LIMIT 1
                     """
                 ),
@@ -153,14 +146,8 @@ class BookingService:
                     SELECT 1
                     FROM availability_blocks
                     WHERE master_id = :master_id
-                      AND """
-                    + sql_overlap_predicate(
-                        start_column="start_at",
-                        end_column="end_at",
-                        start_param="slot_start",
-                        end_param="slot_end",
-                    )
-                    + """
+                      AND start_at < :slot_end
+                      AND :slot_start < end_at
                     LIMIT 1
                     """
                 ),
