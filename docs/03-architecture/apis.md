@@ -23,6 +23,7 @@ Runtime ingress note:
 - Real Telegram updates ingress uses aiogram polling mode in current baseline (`TELEGRAM_UPDATES_MODE=polling`).
 - Webhook ingress mode is not enabled in this baseline.
 - Telegram chat command handlers are registered in aiogram dispatcher and map to existing booking/schedule services.
+- Background reminder worker runs in-process and dispatches due booking reminders to Telegram when token is configured.
 
 Telegram command contract baseline:
 
@@ -271,6 +272,23 @@ Telegram command contract baseline:
   - `telegram_delivery_error`
   - `telegram_updates_runtime_started`
   - `telegram_updates_runtime_disabled`
+  - `booking_reminder_schedule`
+  - `booking_reminder_worker_started`
+  - `booking_reminder_worker_disabled`
+  - `booking_reminder_dispatch`
+  - `booking_reminder_dispatch_error`
 - Redaction policy:
   - Keys containing `token`, `secret`, `password`, `authorization`, `api_key`, `database_url`, `phone` are replaced with `[REDACTED]`.
   - Raw `TELEGRAM_BOT_TOKEN` value is masked from any string field if present.
+
+Booking reminder delivery policy (EPIC-023 baseline):
+
+- Reminder path key for observability: `/internal/telegram/client/booking-reminder`.
+- Scheduling outcomes:
+  - `scheduled`: booking qualifies for 2-hour reminder.
+  - `skipped`: booking created less than 2 hours before slot start.
+  - `replayed`: scheduling request is duplicate for same booking.
+  - `failed`: schedule persistence/validation failed.
+- Dispatch outcomes:
+  - `sent`: reminder message delivered to Telegram recipient.
+  - `failed`: dispatch/send attempt failed (kept pending for next poll retry).

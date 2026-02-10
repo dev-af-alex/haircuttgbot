@@ -13,6 +13,7 @@ from app.booking.flow import BookingFlowRepository, BookingNotification, Booking
 from app.booking.intervals import intervals_overlap, is_interval_blocked
 from app.booking.master_admin import MasterAdminResult, MasterAdminService
 from app.booking.messages import RU_BOOKING_MESSAGES
+from app.booking.reminders import BookingReminderService, is_reminder_eligible
 from app.booking.schedule import (
     MasterDayOffCommand,
     MasterDayOffResult,
@@ -67,6 +68,8 @@ __all__ = [
     "is_cancellation_reason_required",
     "TelegramBookingFlowService",
     "RU_BOOKING_MESSAGES",
+    "BookingReminderService",
+    "is_reminder_eligible",
     "SERVICE_OPTION_CODES",
     "SERVICE_OPTION_HAIRCUT",
     "SERVICE_OPTION_BEARD",

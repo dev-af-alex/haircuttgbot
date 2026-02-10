@@ -243,7 +243,7 @@ Rules:
     - Local-run impact: smoke and Telegram validation steps extend to assert richer notification payloads and manual free-text client scenarios.
     - Delivered: notification context data model extension (manual client name + username/phone snapshots), enriched master/client notification texts with exact slot datetime, manual-booking free-text client input in Telegram callbacks, observability phone redaction update, and synchronized SSOT delivery docs with full regression/smoke coverage.
 
-- EPIC-023 — Time-window reminder notifications (2 hours before appointment) — Status: TODO
+- EPIC-023 — Time-window reminder notifications (2 hours before appointment) — Status: IN_PROGRESS
     - Goal: add proactive reminder notifications for clients exactly for appointments created more than 2 hours before slot start.
     - Acceptance:
         - System schedules and sends reminder to client 2 hours before appointment start in `BUSINESS_TIMEZONE`.

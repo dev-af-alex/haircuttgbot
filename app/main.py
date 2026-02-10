@@ -1,6 +1,6 @@
 import logging
 import os
-from asyncio import Task, create_task
+from asyncio import Task, create_task, sleep
 from contextlib import asynccontextmanager, suppress
 from json import loads
 from datetime import date, datetime, time
@@ -16,6 +16,7 @@ from app.auth import RoleRepository, authorize_command
 from app.booking import (
     AvailabilityService,
     BookingService,
+    BookingReminderService,
     MasterDayOffCommand,
     MasterLunchBreakCommand,
     MasterManualBookingCommand,
@@ -53,6 +54,8 @@ _TELEGRAM_UPDATES_MODES = {
     _TELEGRAM_UPDATES_MODE_POLLING,
     _TELEGRAM_UPDATES_MODE_DISABLED,
 }
+_REMINDER_POLL_SECONDS_ENV = "BOOKING_REMINDER_POLL_SECONDS"
+_REMINDER_POLL_SECONDS_DEFAULT = 30
 
 
 def _resolve_telegram_updates_mode(raw_mode: str | None) -> str:
@@ -116,7 +119,9 @@ async def lifespan(_: FastAPI):
     dispatcher = Dispatcher()
     configure_dispatcher(dispatcher)
     bot: Bot | None = None
+    reminder_bot: Bot | None = None
     polling_task: Task[Any] | None = None
+    reminder_task: Task[Any] | None = None
 
     if runtime_policy["start_polling"]:
         bot = Bot(token=bot_token)
@@ -135,6 +140,27 @@ async def lifespan(_: FastAPI):
             reason=runtime_policy["reason"],
         )
 
+    reminder_poll_seconds = max(5, int(os.getenv(_REMINDER_POLL_SECONDS_ENV, str(_REMINDER_POLL_SECONDS_DEFAULT))))
+    if bot_token:
+        reminder_bot = bot if bot is not None else Bot(token=bot_token)
+        reminder_task = create_task(
+            _run_booking_reminder_worker(
+                engine=get_engine(),
+                bot=reminder_bot,
+                poll_seconds=reminder_poll_seconds,
+            ),
+            name="booking-reminder-worker",
+        )
+        emit_event(
+            "booking_reminder_worker_started",
+            poll_seconds=reminder_poll_seconds,
+        )
+    else:
+        emit_event(
+            "booking_reminder_worker_disabled",
+            reason="missing_token",
+        )
+
     set_service_health(True)
     emit_event(
         "startup",
@@ -149,6 +175,10 @@ async def lifespan(_: FastAPI):
         yield
     finally:
         dispatcher.stop_polling()
+        if reminder_task is not None:
+            reminder_task.cancel()
+            with suppress(Exception):
+                await reminder_task
         if polling_task is not None:
             polling_task.cancel()
             with suppress(Exception):
@@ -156,6 +186,37 @@ async def lifespan(_: FastAPI):
         if bot is not None:
             with suppress(Exception):
                 await bot.session.close()
+        if reminder_bot is not None and reminder_bot is not bot:
+            with suppress(Exception):
+                await reminder_bot.session.close()
+
+
+async def _run_booking_reminder_worker(*, engine, bot: Bot, poll_seconds: int) -> None:  # type: ignore[no-untyped-def]
+    service = BookingReminderService(engine)
+    while True:
+        try:
+            outcomes = await service.dispatch_due_reminders(
+                sender=lambda recipient, message: bot.send_message(chat_id=recipient, text=message),
+            )
+            for outcome_key, value in outcomes.items():
+                if value <= 0:
+                    continue
+                observe_telegram_delivery_outcome(
+                    path="/internal/telegram/client/booking-reminder",
+                    outcome=outcome_key,
+                )
+                emit_event(
+                    "booking_reminder_dispatch",
+                    outcome=outcome_key,
+                    count=value,
+                )
+        except Exception as exc:
+            observe_telegram_delivery_outcome(
+                path="/internal/telegram/client/booking-reminder",
+                outcome="failed",
+            )
+            emit_event("booking_reminder_dispatch_error", error=str(exc))
+        await sleep(poll_seconds)
 
 
 app = FastAPI(title="haircuttgbot-api", version="0.1.0", lifespan=lifespan)

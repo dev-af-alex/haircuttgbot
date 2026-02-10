@@ -93,6 +93,22 @@ def _setup_flow_schema() -> Engine:
                 """
             )
         )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE booking_reminders (
+                    id INTEGER PRIMARY KEY,
+                    booking_id INTEGER UNIQUE NOT NULL,
+                    due_at DATETIME NOT NULL,
+                    status TEXT NOT NULL,
+                    sent_at DATETIME,
+                    last_error TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
         conn.execute(text("INSERT INTO roles (id, name) VALUES (1, 'Client'), (2, 'Master')"))
         conn.execute(
             text(

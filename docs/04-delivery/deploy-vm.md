@@ -76,6 +76,7 @@ The bundle must not include real secret values.
 - Minimum secret set:
   - `TELEGRAM_BOT_TOKEN`
   - `TELEGRAM_UPDATES_MODE` (`polling` default in current baseline; `disabled` for maintenance windows)
+  - `BOOKING_REMINDER_POLL_SECONDS` (optional, default `30`; minimum effective interval `5`)
   - `BUSINESS_TIMEZONE` (IANA timezone, default `Europe/Moscow`)
   - `BOOTSTRAP_MASTER_TELEGRAM_ID` (required positive integer Telegram user ID for bootstrap master provisioning)
   - `DATABASE_URL` (if not composed from service defaults)
@@ -207,6 +208,7 @@ When Telegram token is configured, additionally validate button-first chat flows
   - booking-created notification to master must include client identity context (`@nickname`, and phone when present) plus exact slot datetime.
   - master-cancel notification to client must include cancellation reason and exact cancelled slot datetime.
 - `Master` day-off guardrail: on date with active bookings, day-off action returns deterministic rejection about existing bookings.
+- `Reminder`: booking created >=2h before slot receives one reminder around `slot_start - 2h`; booking created <2h before slot gets no reminder.
 - `Bootstrap master`: `Управление мастерами` -> ensure target user has executed `/start` and has stored `users.telegram_username` -> add by `@nickname` (plus invalid/unknown rejection checks) -> rename target master (plus invalid-name rejection) -> remove same master.
 
 ### 6. Persist on reboot (systemd)
@@ -314,6 +316,7 @@ Run canonical smoke steps from `docs/04-delivery/local-dev.md`:
 - master day-off update
 - master lunch update
 - master manual booking success + overlap rejection + empty-client-text rejection
+- reminder positive (>=2h lead) + skip (<2h lead) scenarios
 - bootstrap-master add/remove flow success + non-bootstrap deny
 - bootstrap-master rename flow success + invalid-input rejection + non-bootstrap deny
 

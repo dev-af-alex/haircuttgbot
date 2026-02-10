@@ -17,6 +17,7 @@ from app.booking.contracts import (
 )
 from app.booking.create_booking import BookingService
 from app.booking.flow import TelegramBookingFlowService
+from app.booking.reminders import BookingReminderService, is_reminder_eligible
 from app.booking.schedule import (
     MasterDayOffCommand,
     MasterLunchBreakCommand,
@@ -95,6 +96,22 @@ def _setup_availability_schema() -> Engine:
                     start_at DATETIME NOT NULL,
                     end_at DATETIME NOT NULL,
                     reason TEXT
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE booking_reminders (
+                    id INTEGER PRIMARY KEY,
+                    booking_id INTEGER UNIQUE NOT NULL,
+                    due_at DATETIME NOT NULL,
+                    status TEXT NOT NULL,
+                    sent_at DATETIME,
+                    last_error TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
                 """
             )
@@ -199,6 +216,22 @@ def _setup_telegram_flow_schema() -> Engine:
                     start_at DATETIME NOT NULL,
                     end_at DATETIME NOT NULL,
                     reason TEXT
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE booking_reminders (
+                    id INTEGER PRIMARY KEY,
+                    booking_id INTEGER UNIQUE NOT NULL,
+                    due_at DATETIME NOT NULL,
+                    status TEXT NOT NULL,
+                    sent_at DATETIME,
+                    last_error TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
                 """
             )
@@ -1131,6 +1164,13 @@ def test_telegram_booking_flow_confirm_sends_notifications_and_rejects_second_fu
     assert len(notifications) == 2
     recipients = {item["recipient_telegram_user_id"] for item in notifications}
     assert recipients == {2000001, 1000001}
+    with engine.connect() as conn:
+        reminder = conn.execute(
+            text("SELECT status FROM booking_reminders WHERE booking_id = :booking_id"),
+            {"booking_id": int(first["booking_id"])},
+        ).mappings().first()
+    assert reminder is not None
+    assert reminder["status"] in {"pending", "skipped"}
     master_message = next(item["message"] for item in notifications if item["recipient_telegram_user_id"] == 1000001)
     assert "Клиент: @client_a" in master_message
     assert "Телефон: +79991234567" in master_message
@@ -1205,3 +1245,58 @@ def test_telegram_master_cancel_sends_reason_to_client_and_rejects_without_reaso
     )
     assert "Непредвиденные обстоятельства" in client_message
     assert "Слот:" in client_message
+
+
+def test_reminder_eligibility_boundary() -> None:
+    slot = datetime(2026, 2, 12, 12, 0, tzinfo=UTC)
+    assert is_reminder_eligible(slot_start=slot, booking_created_at=datetime(2026, 2, 12, 10, 0, tzinfo=UTC))
+    assert not is_reminder_eligible(slot_start=slot, booking_created_at=datetime(2026, 2, 12, 10, 1, tzinfo=UTC))
+
+
+def test_reminder_dispatch_sends_once_for_single_booking() -> None:
+    engine = _setup_telegram_flow_schema()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO bookings (id, master_id, client_user_id, service_type, status, slot_start, slot_end)
+                VALUES (900, 1, 20, 'haircut', 'active', :slot_start, :slot_end)
+                """
+            ),
+            {
+                "slot_start": datetime(2026, 2, 20, 12, 0, tzinfo=UTC),
+                "slot_end": datetime(2026, 2, 20, 12, 30, tzinfo=UTC),
+            },
+        )
+        conn.execute(
+            text(
+                """
+                INSERT INTO booking_reminders (booking_id, due_at, status)
+                VALUES (900, :due_at, 'pending')
+                """
+            ),
+            {"due_at": datetime(2026, 2, 20, 10, 0, tzinfo=UTC)},
+        )
+
+    sent: list[tuple[int, str]] = []
+
+    async def _sender(recipient: int, message: str) -> None:
+        sent.append((recipient, message))
+
+    service = BookingReminderService(engine)
+    import asyncio
+
+    asyncio.run(
+        service.dispatch_due_reminders(
+            sender=_sender,
+            now=datetime(2026, 2, 20, 10, 0, tzinfo=UTC),
+        )
+    )
+    asyncio.run(
+        service.dispatch_due_reminders(
+            sender=_sender,
+            now=datetime(2026, 2, 20, 10, 1, tzinfo=UTC),
+        )
+    )
+    assert len(sent) == 1
+    assert sent[0][0] == 2000001

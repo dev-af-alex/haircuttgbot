@@ -6,6 +6,7 @@
 - `users`: Telegram identity + role mapping (+ optional contact fields `telegram_username`, `phone_number`).
 - `masters`: master profile and working window defaults (10:00-21:00, lunch 13:00-14:00).
 - `bookings`: client-master time slot reservations and status lifecycle (+ notification-context snapshots and optional manual client text).
+- `booking_reminders`: durable reminder schedule state for booking notifications (due time, send status, delivery error context).
 - `availability_blocks`: day-off, lunch-break, and manual unavailability windows.
 - `audit_events`: security/booking lifecycle event log.
 
@@ -23,6 +24,7 @@
 - `bookings.slot_end > bookings.slot_start` check.
 - `availability_blocks.end_at > availability_blocks.start_at` check.
 - `bookings.manual_client_name` is populated for master-created manual bookings and used in schedule/notification rendering.
+- `booking_reminders.booking_id` is unique to guarantee at most one 2-hour reminder record per booking.
 
 ## 4) Data lifecycle
 

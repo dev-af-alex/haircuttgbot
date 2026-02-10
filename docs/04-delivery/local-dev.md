@@ -14,6 +14,7 @@ A developer can run:
 - Docker Compose v2 (`docker compose`)
 - Optional for host-side unit tests: Python 3.12 virtualenv with dependencies installed in `.venv`
 - Optional: copy `.env.example` to `.env`, set `TELEGRAM_BOT_TOKEN`, and keep `TELEGRAM_UPDATES_MODE=polling` for real Telegram integration tests.
+- Optional reminder worker tuning: `BOOKING_REMINDER_POLL_SECONDS` (default `30`, minimum effective runtime interval `5`).
 - Required bootstrap config: `BOOTSTRAP_MASTER_TELEGRAM_ID` must be a positive integer Telegram user ID (compose default is `1000001`).
 - Business time config: `BUSINESS_TIMEZONE` must be a valid IANA timezone (compose default is `Europe/Moscow`).
 
@@ -31,6 +32,7 @@ A developer can run:
    `.venv/bin/pytest -q`
 7. (Optional) Verify Telegram polling runtime state in startup logs:
    `docker compose logs bot-api --tail=200 | grep 'telegram_updates_runtime'`
+   `docker compose logs bot-api --tail=200 | grep 'booking_reminder_worker'`
 8. `docker compose down` to stop
 
 ## Ports
@@ -112,6 +114,9 @@ Use this sequence when validating aiogram runtime against a real Telegram chat.
    - verify informative notifications:
      - on client booking creation master notification includes client context (`@nickname`, and phone when present) plus exact slot date/time;
      - on master cancellation client notification includes reason and exact cancelled slot date/time.
+   - verify reminder behavior:
+     - create booking with slot start > 2h from current time and confirm client receives reminder approximately 2h before slot;
+     - create booking with slot start < 2h from current time and confirm reminder is not sent.
    - validate EPIC-016 guardrails:
      - if current time in `BUSINESS_TIMEZONE` is `15:00`, in client `Новая запись` same-day slots earlier than `15:30` are not offered;
      - for an occupied date, `Выходной день` returns rejection text about existing active bookings.

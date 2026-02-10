@@ -10,7 +10,9 @@ from app.booking.availability import AvailabilityService
 from app.booking.cancel_booking import BookingCancellationService
 from app.booking.create_booking import BookingService
 from app.booking.messages import RU_BOOKING_MESSAGES
+from app.booking.reminders import BookingReminderService
 from app.booking.service_options import SERVICE_OPTION_LABELS_RU, list_service_options
+from app.observability import emit_event, observe_telegram_delivery_outcome
 from app.timezone import normalize_utc, to_business, utc_now
 
 
@@ -221,6 +223,7 @@ class TelegramBookingFlowService:
         self._bookings = BookingService(engine)
         self._cancellations = BookingCancellationService(engine)
         self._notifications = BookingNotificationService()
+        self._reminders = BookingReminderService(engine)
 
     def start(self) -> dict[str, object]:
         masters = self._repository.list_active_masters()
@@ -294,6 +297,23 @@ class TelegramBookingFlowService:
             else None
         )
         master_telegram_user_id = self._repository.get_master_telegram_user_id(master_id)
+        if result.booking_id is not None:
+            now_utc = utc_now()
+            reminder_outcome = self._reminders.schedule_for_booking(
+                booking_id=result.booking_id,
+                slot_start=slot_start,
+                booking_created_at=now_utc,
+            )
+            observe_telegram_delivery_outcome(
+                path="/internal/telegram/client/booking-reminder",
+                outcome=reminder_outcome,
+            )
+            emit_event(
+                "booking_reminder_schedule",
+                booking_id=result.booking_id,
+                client_telegram_user_id=client_telegram_user_id,
+                outcome=reminder_outcome,
+            )
         notifications = (
             self._notifications.build_booking_confirmation(
                 client_telegram_user_id=client_telegram_user_id,
