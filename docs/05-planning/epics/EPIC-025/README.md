@@ -1,6 +1,6 @@
 # EPIC-025 — Two-month booking horizon with paginated date navigation
 
-Status: IN_PROGRESS
+Status: DONE
 Started: 2026-02-10
 Roadmap source: `docs/05-planning/epics.md`
 
@@ -36,7 +36,7 @@ Allow `Client` and `Master` booking flows to select any date within a rolling 2-
 
 ## ADR
 
-- Proposed: `docs/90-decisions/adr-0022-two-month-booking-horizon-and-date-picker-pagination.md`
+- Accepted: `docs/90-decisions/adr-0022-two-month-booking-horizon-and-date-picker-pagination.md`
 
 ## Epic Acceptance Target
 
@@ -44,3 +44,15 @@ Allow `Client` and `Master` booking flows to select any date within a rolling 2-
 - Date selection does not render the whole horizon at once; users can move pages forward/back.
 - Forward/back page callbacks are idempotent and stale-safe.
 - Existing functional/guardrail behavior remains unchanged and regression-covered.
+
+## Delivered
+
+- Implemented shared 60-day date pagination with explicit forward/back navigation callbacks for client and master manual booking flows.
+- Preserved guardrails, stale/invalid callback determinism, and role boundaries under extended horizon.
+- Added regression coverage for page boundaries, far-horizon booking success, and out-of-range page tokens.
+- Updated SSOT docs for FR, callback contract, ADR status, and local smoke expectations.
+
+## Merge Gates
+
+- Local merge gates: satisfied (`.venv/bin/pytest -q`, `docker compose up -d --build`, seed, `/health`, `/metrics`, `docker compose down`).
+- Intentional deviation: CI status and PR-time SAST/dependency/secrets scans were not re-run in this epic-close step.

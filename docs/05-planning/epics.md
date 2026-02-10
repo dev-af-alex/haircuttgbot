@@ -265,7 +265,7 @@ Rules:
     - Local-run impact: local validation adds repeatable perf-check commands/scenarios in addition to functional smoke, while keeping `docker compose up -d` workflow unchanged.
     - Delivered: migration `20260210_0006` introduced booking/schedule/reminder/nickname hotspot indexes, booking/schedule active-status query alignment preserved behavior, perf harness/report added (`scripts/perf/profile_booking_queries.py`, `docs/05-planning/epics/EPIC-024/perf-report.md`) with targeted app-level p95 below `600 ms` in defined local synthetic profile; merge gates satisfied locally (pytest slice + compose smoke), intentional deviation: CI/SAST/dep/secrets checks not re-run in this local close step.
 
-- EPIC-025 — Two-month booking horizon with paginated date navigation — Status: IN_PROGRESS
+- EPIC-025 — Two-month booking horizon with paginated date navigation — Status: DONE
     - Goal: allow `Client` and `Master` booking flows to select any day within ближайшие 2 месяца, while keeping Telegram date selection usable via forward/back pagination instead of showing all dates at once.
     - Acceptance:
         - Client booking flow supports date selection for any day in rolling 2-month horizon from current business date.
@@ -275,3 +275,4 @@ Rules:
         - Local/VM smoke includes at least one forward-page and one backward-page navigation scenario plus successful booking on a far date within the 2-month window.
     - Dependencies: EPIC-012, EPIC-014, EPIC-016, EPIC-021.
     - Local-run impact: compose runtime stays unchanged; smoke and callback regression coverage expand to include paginated date navigation and far-horizon booking validation.
+    - Delivered: shared 60-day paginated date-picker contract (`cdp`/`mbp`) for client + master manual flows, horizon-bound token validation, far-date regression coverage, accepted ADR-0022, and synchronized local-dev smoke docs; merge gates satisfied locally (full pytest + compose smoke), intentional deviation: CI/SAST/dep/secrets checks not re-run in this close step.
